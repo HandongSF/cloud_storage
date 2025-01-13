@@ -1,0 +1,139 @@
+name: Go
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        go-version: [1.21.x, 1.22.x, 1.23.x]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      CGO_ENABLED: 0
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: ${{ matrix.go-version }}
+
+    - name: CPU support
+      run: go install github.com/klauspost/cpuid/v2/cmd/cpuid@latest&&cpuid
+
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Vet
+      run: go vet ./...
+
+    - name: Test
+      run: go test -timeout=15m
+
+    - name: Test Noasm
+      run: go test -tags=noasm -short&&go test -short -no-avx512&&go test -short -no-avx512 -no-avx-gfni&&go test -short -no-avx512 -no-avx2&&go test -no-avx512 -no-avx2 -no-ssse3 -short
+
+    - name: Test Nopshufb
+      run: go test -tags=nopshufb -short&&go test -tags=nopshufb -short -no-avx512&&go test -tags=nopshufb -short -no-avx512 -no-avx-gfni&&go test -tags=nopshufb -no-avx512 -no-avx2 -no-ssse3 -no-sse2 -short
+
+    - name: Test Race
+      env:
+        CGO_ENABLED: 1
+      run: go test -cpu="1,4" -short -race -v -timeout 20m .
+
+  build-special:
+    env:
+      CGO_ENABLED: 0
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.22.x
+
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: fmt
+      run: diff <(gofmt -d .) <(printf "")
+
+    - name: Test 386
+      run: GOOS=linux GOARCH=386 go test -short ./...
+
+    - name: Build examples
+      run: go build examples/simple-decoder.go&&go build examples/simple-encoder.go&&go build examples/stream-decoder.go&&go build examples/stream-encoder.go
+
+    - name: Test Races, noasm, 1 cpu
+      env:
+        CGO_ENABLED: 1
+      run: go test -tags=noasm -cpu=1 -short -race -timeout 20m .
+
+    - name: Test Races, noasm, 4 cpu
+      env:
+        CGO_ENABLED: 1
+      run: go test -tags=noasm -cpu=4 -short -race -timeout 20m .
+
+    - name: Test Races, no gfni
+      env:
+        CGO_ENABLED: 1
+      run: go test -no-gfni -short -race
+
+    - name: Test Races, no avx512
+      env:
+        CGO_ENABLED: 1
+      run: go test -no-avx512 -short -race .
+
+    - name: Test Races, no avx512, no avx-gfni
+      env:
+        CGO_ENABLED: 1
+      run: go test -no-avx512 -no-avx-gfni -short -race .
+
+    - name: Test Races, no avx2
+      env:
+        CGO_ENABLED: 1
+      run: go test -no-avx512 -no-avx2 -short -race .
+
+    - name: Test Races, no ssse3
+      env:
+        CGO_ENABLED: 1
+      run: go test -no-avx512 -no-avx2 -no-ssse3 -short -race .
+
+    - name: Test Microarch v4
+      shell: bash {0}
+      run: go run testlevel.go 4;if [ $? -eq 0 ]; then GOAMD64=v4 go test -no-avx512 ./...; else true; fi
+
+    - name: Builds on ARM64
+      env:
+        GOOS: linux
+        GOARCH: arm64
+      run: go build .&&go build examples/simple-decoder.go&&go build examples/simple-encoder.go&&go build examples/stream-decoder.go&&go build examples/stream-encoder.go&&go build -tags=nopshufb .&&go build -tags=nopshufb examples/simple-decoder.go&&go build examples/simple-encoder.go&&go build -tags=nopshufb examples/stream-decoder.go&&go build examples/stream-encoder.go
+
+    - name: Build on PPC64LE
+      env:
+        GOOS: linux
+        GOARCH: ppc64le
+      run: go build .&&go build examples/simple-decoder.go&&go build examples/simple-encoder.go&&go build examples/stream-decoder.go&&go build examples/stream-encoder.go && go build -tags=nopshufb .&&go build -tags=nopshufb examples/simple-decoder.go&&go build examples/simple-encoder.go&&go build -tags=nopshufb examples/stream-decoder.go&&go build examples/stream-encoder.go
+
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.22.x
+
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Generate
+        working-directory: ./_gen
+        run: go generate -v -x
+
+      - name: Git Status
+        run: |
+          git diff
+          test -z "$(git status --porcelain)"
