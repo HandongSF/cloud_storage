@@ -236,8 +236,7 @@ func ShowStats() bool {
 	return statsIntervalFlag != nil && statsIntervalFlag.Changed
 }
 
-// Run the function with stats and retries if required
-func Run(Retry bool, showStats bool, cmd *cobra.Command, f func() error) {
+func RunWithSustainOS(Retry bool, showStats bool, cmd *cobra.Command, f func() error, sustainOS bool) {
 	ctx := context.Background()
 	ci := fs.GetConfig(ctx)
 	var cmdErr error
@@ -336,7 +335,12 @@ func Run(Retry bool, showStats bool, cmd *cobra.Command, f func() error) {
 			fs.Logf(nil, "Failed to %s with %d errors: last error was: %v", cmd.Name(), nerrs, cmdErr)
 		}
 	}
-	resolveExitCode(cmdErr)
+	resolveExitCode(cmdErr, sustainOS)
+}
+
+// Run the function with stats and retries if required
+func Run(Retry bool, showStats bool, cmd *cobra.Command, f func() error) {
+	RunWithSustainOS(Retry, showStats, cmd, f, false)
 }
 
 // CheckArgs checks there are enough arguments and prints a message if not
@@ -344,11 +348,11 @@ func CheckArgs(MinArgs, MaxArgs int, cmd *cobra.Command, args []string) {
 	if len(args) < MinArgs {
 		_ = cmd.Usage()
 		_, _ = fmt.Fprintf(os.Stderr, "Command %s needs %d arguments minimum: you provided %d non flag arguments: %q\n", cmd.Name(), MinArgs, len(args), args)
-		resolveExitCode(errorNotEnoughArguments)
+		resolveExitCode(errorNotEnoughArguments, false)
 	} else if len(args) > MaxArgs {
 		_ = cmd.Usage()
 		_, _ = fmt.Fprintf(os.Stderr, "Command %s needs %d arguments maximum: you provided %d non flag arguments: %q\n", cmd.Name(), MaxArgs, len(args), args)
-		resolveExitCode(errorTooManyArguments)
+		resolveExitCode(errorTooManyArguments, false)
 	}
 }
 
@@ -482,11 +486,11 @@ func initConfig() {
 	}
 }
 
-func resolveExitCode(err error) {
+func resolveExitCode(err error, sustainIfNilError bool) {
 	ctx := context.Background()
 	ci := fs.GetConfig(ctx)
 	atexit.Run()
-	if err == nil {
+	if err == nil && !sustainIfNilError {
 		if ci.ErrorOnNoTransfer {
 			if accounting.GlobalStats().GetTransfers() == 0 {
 				os.Exit(exitcode.NoFilesTransferred)
@@ -513,7 +517,9 @@ func resolveExitCode(err error) {
 	case errors.Is(err, errorCommandNotFound), errors.Is(err, errorNotEnoughArguments), errors.Is(err, errorTooManyArguments):
 		os.Exit(exitcode.UsageError)
 	default:
-		os.Exit(exitcode.UncategorizedError)
+		if err == nil && !sustainIfNilError {
+			os.Exit(exitcode.UncategorizedError)
+		}
 	}
 }
 

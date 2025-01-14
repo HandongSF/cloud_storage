@@ -1,0 +1,44 @@
+package dis_download
+
+import (
+	"strings"
+
+	"github.com/rclone/rclone/cmd"
+	"github.com/spf13/cobra"
+)
+
+func init() {
+	cmd.Root.AddCommand(commandDefinition)
+}
+
+var commandDefinition = &cobra.Command{
+	Use:   "dis_download target:name destination:path",
+	Short: `Download distributed file to destination path.`,
+	Long: strings.ReplaceAll(
+		`Download distributed file to destination path. Target file must be
+requested in full name, meaning that it must be followed with its extension.
+
+eg
+
+	rclone dis_download test.txt remote:path
+
+
+Note that during this process, distributed binary files stored remote will be 
+requeted from the remotes and decoded in the process to be downloaded in the 
+destination path. If some of the partitioned files have been lost or damaged
+during this process, an automatic recovery process will be used to restore the 
+original file. Erasure Coding is using Reed Solomon is used during this process
+and parity blocks are used to restore the file. If the damage goes over a
+threshhold, recovery of the file can be difficult.
+
+Downloading the file does not erase the distributed binary files in the remote.
+To erase the files, use the dis_rm command instead.
+
+[dis_rm] (/commands/dis_rm/).`, "|", "`"),
+	Annotations: map[string]string{
+		"groups": "Copy,Filter,Listing,Important",
+	},
+	Run: func(command *cobra.Command, args []string) {
+		cmd.CheckArgs(2, 2, command, args)
+	},
+}
