@@ -6,6 +6,7 @@
 # Folders
 _obj
 _test
+/shard/*
 
 # Architecture specific extensions/prefixes
 *.[568vq]
@@ -24,3 +25,4 @@ _testmain.go
 *.prof
 
 .idea
+

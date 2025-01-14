@@ -42,13 +42,15 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/klauspost/reedsolomon"
 )
 
-var dataShards = flag.Int("data", 100, "Number of shards to split the data into")
+var dataShards = flag.Int("data", 10, "Number of shards to split the data into")
 var parShards = flag.Int("par", 2, "Number of parity shards")
 var outFile = flag.String("out", "", "Alternative output path/file")
+var shardDir = flag.String("dir", "shard", "Directory containing shard files")
 
 func init() {
 	flag.Usage = func() {
@@ -80,9 +82,9 @@ func main() {
 
 	// Verify the shards
 	ok, err := enc.Verify(shards)
-	if ok { //파일이 있으면
+	if ok {
 		fmt.Println("No reconstruction needed")
-	} else { //파일이 없으면
+	} else {
 		fmt.Println("Verification failed. Reconstructing data")
 		shards, size, err = openInput(*dataShards, *parShards, fname)
 		checkErr(err)
@@ -90,7 +92,7 @@ func main() {
 		out := make([]io.Writer, len(shards))
 		for i := range out {
 			if shards[i] == nil {
-				outfn := fmt.Sprintf("%s.%d", fname, i)
+				outfn := filepath.Join(*shardDir, fmt.Sprintf("%s.%d", fname, i))
 				fmt.Println("Creating", outfn)
 				out[i], err = os.Create(outfn)
 				checkErr(err)
@@ -139,7 +141,7 @@ func openInput(dataShards, parShards int, fname string) (r []io.Reader, size int
 	// Create shards and load the data.
 	shards := make([]io.Reader, dataShards+parShards)
 	for i := range shards {
-		infn := fmt.Sprintf("%s.%d", fname, i)
+		infn := filepath.Join(*shardDir, fmt.Sprintf("%s.%d", fname, i))
 		fmt.Println("Opening", infn)
 		f, err := os.Open(infn)
 		if err != nil {
