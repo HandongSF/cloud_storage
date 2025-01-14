@@ -42,7 +42,6 @@ func remoteCallCopy(args []string) (err error) {
 
 	err = copyCommand.Execute()
 	if err != nil {
-		fmt.Printf("Error executing command: %v\n", err)
 		return fmt.Errorf("error executing copyCommand: %w", err)
 	}
 
@@ -61,15 +60,11 @@ var commandDefinition = &cobra.Command{
 	Run: func(command *cobra.Command, args []string) {
 		cmd.CheckArgs(2, 2, command, args)
 		fsrc, srcFileName, fdst := cmd.NewFsSrcFileDst(args)
-		cmd.Run(true, true, command, func() error {
+		cmd.RunWithSustainOS(true, true, command, func() error {
 			if srcFileName == "" {
-				err := sync.CopyDir(context.Background(), fdst, fsrc, createEmptySrcDirs)
-				fmt.Printf("sync.CopyDir completed with error: %v\n", err)
-				return err
+				return sync.CopyDir(context.Background(), fdst, fsrc, createEmptySrcDirs)
 			}
-			err := operations.CopyFile(context.Background(), fdst, fsrc, srcFileName, srcFileName)
-			fmt.Printf("operations.CopyFile completed with error: %v\n", err)
-			return err
-		})
+			return operations.CopyFile(context.Background(), fdst, fsrc, srcFileName, srcFileName)
+		}, true)
 	},
 }

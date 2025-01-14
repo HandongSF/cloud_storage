@@ -118,13 +118,13 @@ var helpBackend = &cobra.Command{
 func runRoot(cmd *cobra.Command, args []string) {
 	if version {
 		ShowVersion()
-		resolveExitCode(nil)
+		resolveExitCode(nil, false)
 	} else {
 		_ = cmd.Usage()
 		if len(args) > 0 {
 			_, _ = fmt.Fprintf(os.Stderr, "Command not found.\n")
 		}
-		resolveExitCode(errorCommandNotFound)
+		resolveExitCode(errorCommandNotFound, false)
 	}
 }
 
