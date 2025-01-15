@@ -41,7 +41,7 @@ type Remote struct {
 }
 
 func Dis_Upload(args []string) (err error) {
-	//성주
+	// Check if file exists, if yes, create directory with same name
 	err = dis_init(args[0])
 	if err != nil {
 		return err
