@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/rclone/rclone/cmd"
 	"github.com/rclone/rclone/fs/config"
@@ -48,28 +47,22 @@ func Dis_Upload(args []string) (err error) {
 		return err
 	}
 
-	dis_names, num := reedsolomon.DoEncode(args[0])
+	dis_names, shardSize := reedsolomon.DoEncode(args[0])
 	remotes := config.GetRemoteNames()
 
-	if num == 0 {
-		return fmt.Errorf("no remotes configured for upload")
-	}
-	if num != len(dis_names) {
-		return fmt.Errorf("number of files does not match")
-	}
-
 	counter := 0
-	for _, name := range dis_names {
-		fmt.Printf("Uploading file name: %s\n", name)
+	for _, source := range dis_names {
 
 		dest := fmt.Sprintf("%s:%s", remotes[counter], remoteDirectory)
 
-		tempArgs := []string{name, dest}
+		fmt.Printf("Uploading file %s to %s of size %d\n", source, dest, shardSize)
+
+		tempArgs := []string{source, dest}
 
 		// Perform the upload
 		err = remoteCallCopy(tempArgs)
 		if err != nil {
-			return fmt.Errorf("error in Dis_Upload for file %s: %w", name, err)
+			return fmt.Errorf("error in Dis_Upload for file %s: %w", source, err)
 		}
 
 		counter = (counter + 1) % len(remotes)
@@ -133,15 +126,15 @@ func dis_init(arg string) (err error) {
 	fmt.Println("Success to find file : ", fi)
 
 	// 유저가 현재 위치한 로컬 디렉토리에(path) 파일이름으로 디렉토리 생성
-	fileBase := strings.TrimSuffix(arg, filepath.Ext(arg))
-	dirPath := filepath.Join(path, fileBase+"_dir")
+	//fileBase := strings.TrimSuffix(arg, filepath.Ext(arg))
+	//dirPath := filepath.Join(path, fileBase+"_dir")
 
-	err = os.Mkdir(dirPath, 0755)
-	if err != nil {
-		fmt.Println("Error creating directory: ", err)
-		return err
-	}
-	fmt.Println("Directory created successfully at: ", dirPath)
+	//err = os.Mkdir(dirPath, 0755)
+	//if err != nil {
+	//	fmt.Println("Error creating directory: ", err)
+	//	return err
+	//}
+	//fmt.Println("Directory created successfully at: ", dirPath)
 
 	return nil
 }
