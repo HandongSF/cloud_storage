@@ -1,6 +1,7 @@
 package dis_operations
 
 import (
+	"fmt"
 	"os"
 	"testing"
 )
@@ -92,6 +93,15 @@ func TestCalculateChecksum(t *testing.T) {
 
 	if checksum != expectedChecksum {
 		t.Errorf("Expected checksum: %s, but got: %s", expectedChecksum, checksum)
+	}
+}
+
+func TestGetDistributedFile(t *testing.T) {
+	listOfFile, err := GetDistributedFile()
+	if err == nil {
+		fmt.Printf(listOfFile)
+	} else {
+		t.Errorf("get distributed file name failed %v", err)
 	}
 }
 
