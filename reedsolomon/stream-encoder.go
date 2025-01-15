@@ -1,30 +1,11 @@
-//go:build ignore
-// +build ignore
+/**
+ * Reed-Solomon Coding over 8-bit values.
+ *
+ * Copyright 2015, Klaus Post
+ * Copyright 2015, Backblaze, Inc.
+ */
 
-// Copyright 2015, Klaus Post, see LICENSE for details.
-//
-// Simple stream encoder example
-//
-// The encoder encodes a single file into a number of shards
-// To reverse the process see "stream-decoder.go"
-//
-// To build an executable use:
-//
-// go build stream-encoder.go
-//
-// Simple Encoder/Decoder Shortcomings:
-// * If the file size of the input isn't dividable by the number of data shards
-//   the output will contain extra zeroes
-//
-// * If the shard numbers isn't the same for the decoder as in the
-//   encoder, invalid output will be generated.
-//
-// * If values have changed in a shard, it cannot be reconstructed.
-//
-// * If two shards have been swapped, reconstruction will always fail.
-//   You need to supply the shards in the same order as they were given to you.
-//
-// The solution for this is to save a metadata file containing:
+// Package reedsolomon enables Erasure Coding in Go
 //
 // * File size.
 // * The number of data/parity shards.
@@ -35,7 +16,7 @@
 // in a shard and be able to reconstruct your data if you have the needed number of shards left.
 
 // package reedsolomon
-package main
+package reedsolomon
 
 import (
 	"flag"
@@ -45,7 +26,7 @@ import (
 
 	"io"
 
-	"github.com/rclone/rclone/reedsolomon"
+	"github.com/klauspost/reedsolomon"
 )
 
 var dataShards = flag.Int("data", 10, "Number of shards to split the data into, must be below 257.")
@@ -141,25 +122,6 @@ func DoEncode(fname string) ([]string, int) {
 	checkErr(err)
 	fmt.Printf("File split into %d data + %d parity shards.\n", *dataShards, *parShards)
 	return paths, sizePerShard
-}
-
-func main() {
-	flag.Parse()
-	args := flag.Args()
-	if len(args) != 1 {
-		fmt.Fprintf(os.Stderr, "Error: No input filename given\n")
-		flag.Usage()
-		os.Exit(1)
-	}
-
-	fname := args[0]
-	paths, fileSize := DoEncode(fname)
-	fmt.Println("file size is", fileSize)
-
-	fmt.Println("===== 결과 ======")
-	for i, path := range paths {
-		fmt.Println(i, ": ", path)
-	}
 }
 
 func checkErr(err error) {
