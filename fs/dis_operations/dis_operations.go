@@ -40,6 +40,11 @@ type Remote struct {
 }
 
 func Dis_Upload(args []string) (err error) {
+	//성주
+	err = dis_init(args[0])
+	if err != nil {
+		return err
+	}
 
 	remotes := config.GetRemoteNames()
 
@@ -95,33 +100,35 @@ var commandDefinition = &cobra.Command{
 	},
 }
 
-func dis_init(args []string) {
+func dis_init(arg string) (err error) {
 	path, err := os.Getwd()
 	if err != nil {
 		fmt.Println("error to get current directory path: ", err)
-		return
+		return err
 	}
 
-	fullPath := filepath.Join(path, args[0])
+	fullPath := filepath.Join(path, arg)
 	// 존재하지 않는 파일이라면 cmd창에 에러 메세지 출력
 	fi, err := os.Open(fullPath)
 	if err != nil {
 		fmt.Println("file does not exit", err)
-		return
+		return err
 	}
 	// 존재한다면 ok 메세지 cmd창에 출력
 	fmt.Println("Success to find file : ", fi)
 
 	// 유저가 현재 위치한 로컬 디렉토리에(path) 파일이름으로 디렉토리 생성
-	fileBase := strings.TrimSuffix(args[0], filepath.Ext(args[0]))
+	fileBase := strings.TrimSuffix(arg, filepath.Ext(arg))
 	dirPath := filepath.Join(path, fileBase+"_dir")
 
 	err = os.Mkdir(dirPath, 0755)
 	if err != nil {
 		fmt.Println("Error creating directory: ", err)
-		return
+		return err
 	}
 	fmt.Println("Directory created successfully at: ", dirPath)
+
+	return nil
 }
 
 func GetDistributedInfo(fileName string, remote Remote) (DistributedFile, error) {
