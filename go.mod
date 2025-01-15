@@ -45,6 +45,8 @@ require (
 	github.com/josephspurrier/goversioninfo v1.4.1
 	github.com/jzelinskie/whirlpool v0.0.0-20201016144138-0675e54bb004
 	github.com/klauspost/compress v1.17.11
+	github.com/klauspost/cpuid/v2 v2.2.8
+	github.com/klauspost/reedsolomon v1.12.4
 	github.com/koofr/go-httpclient v0.0.0-20240520111329-e20f8f203988
 	github.com/koofr/go-koofrclient v0.0.0-20221207135200-cbd7fc9ad6a6
 	github.com/mattn/go-colorable v0.1.13
@@ -169,7 +171,6 @@ require (
 	github.com/jcmturner/goidentity/v6 v6.0.1 // indirect
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
 	github.com/jtolio/noiseconn v0.0.0-20231127013910-f6d9ecbf1de7 // indirect
-	github.com/klauspost/cpuid/v2 v2.2.8 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/lpar/date v1.0.0 // indirect
@@ -228,4 +229,12 @@ require (
 	github.com/pkg/xattr v0.4.10
 	golang.org/x/mobile v0.0.0-20240716161057-1ad2df20a8b6
 	golang.org/x/term v0.27.0
+
+)
+
+retract (
+	v1.12.2 // https://github.com/klauspost/reedsolomon/pull/283
+	v1.11.6 // https://github.com/klauspost/reedsolomon/issues/240
+	[v1.11.3, v1.11.5] // https://github.com/klauspost/reedsolomon/pull/238
+	v1.11.2 // https://github.com/klauspost/reedsolomon/pull/229
 )
