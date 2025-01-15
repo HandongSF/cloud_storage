@@ -16,6 +16,7 @@ import (
 	"github.com/rclone/rclone/fs/config"
 	"github.com/rclone/rclone/fs/operations"
 	"github.com/rclone/rclone/fs/sync"
+	"github.com/rclone/rclone/reedsolomon"
 	"github.com/spf13/cobra"
 )
 
@@ -47,18 +48,31 @@ func Dis_Upload(args []string) (err error) {
 		return err
 	}
 
+	dis_names, num := reedsolomon.DoEncode(args[0])
 	remotes := config.GetRemoteNames()
 
-	for _, remote := range remotes {
-		dest := fmt.Sprintf("%s:%s", remote, remoteDirectory)
-		tempArgs := []string{args[0], dest}
+	if num == 0 {
+		return fmt.Errorf("no remotes configured for upload")
+	}
+	if num != len(dis_names) {
+		return fmt.Errorf("number of files does not match")
+	}
 
-		fmt.Printf("Uploading to remote: %s\n", dest)
+	counter := 0
+	for _, name := range dis_names {
+		fmt.Printf("Uploading file name: %s\n", name)
+
+		dest := fmt.Sprintf("%s:%s", remotes[counter], remoteDirectory)
+
+		tempArgs := []string{name, dest}
+
+		// Perform the upload
 		err = remoteCallCopy(tempArgs)
-
 		if err != nil {
-			return fmt.Errorf("error in Dis_Upload: %w", err)
+			return fmt.Errorf("error in Dis_Upload for file %s: %w", name, err)
 		}
+
+		counter = (counter + 1) % len(remotes)
 	}
 
 	fmt.Printf("Completed Dis_Upload\n")
