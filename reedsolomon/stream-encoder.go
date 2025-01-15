@@ -45,7 +45,7 @@ import (
 
 	"io"
 
-	"github.com/klauspost/reedsolomon"
+	"github.com/rclone/rclone/reedsolomon"
 )
 
 var dataShards = flag.Int("data", 10, "Number of shards to split the data into, must be below 257.")
