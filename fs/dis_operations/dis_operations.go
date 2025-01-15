@@ -22,9 +22,10 @@ import (
 var remoteDirectory = "Distribution"
 
 type DistributedFile struct {
-	DistributedFile string `json:"distributed_file_name"`
-	DisFileSize     int64  `json:"distributed_file_size"`
-	remote          Remote
+	OriginalFileName string `json:"original_file_name"`
+	DistributedFile  string `json:"distributed_file_name"`
+	DisFileSize      int64  `json:"distributed_file_size"`
+	remote           Remote
 }
 
 type FileInfo struct {
@@ -214,4 +215,25 @@ func calculateChecksum(filePath string) (string, error) {
 		return "", fmt.Errorf("failed to compute checksum: %v", err)
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// return filename
+func GetDistributedFile() (string, error) {
+	FilePath := "/Users/iyeeun/Desktop/datamap.json"
+
+	file, err := os.Open(FilePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open file : %v", err)
+	}
+	defer file.Close()
+
+	var data DistributedFile
+	decoder := json.NewDecoder(file)
+	ero := decoder.Decode(&data)
+	if ero != nil {
+		return "", fmt.Errorf("json 디코딩 실패 %v", ero)
+	}
+
+	return data.OriginalFileName, nil
+
 }
