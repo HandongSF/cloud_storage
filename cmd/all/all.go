@@ -23,6 +23,7 @@ import (
 	_ "github.com/rclone/rclone/cmd/dedupe"
 	_ "github.com/rclone/rclone/cmd/delete"
 	_ "github.com/rclone/rclone/cmd/deletefile"
+	_ "github.com/rclone/rclone/cmd/dis_download"
 	_ "github.com/rclone/rclone/cmd/dis_upload"
 	_ "github.com/rclone/rclone/cmd/genautocomplete"
 	_ "github.com/rclone/rclone/cmd/gendocs"

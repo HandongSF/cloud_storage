@@ -35,7 +35,7 @@
 
 // package reedsolomon
 
-package main
+package reedsolomon
 
 import (
 	"flag"

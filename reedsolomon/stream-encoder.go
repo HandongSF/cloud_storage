@@ -35,7 +35,7 @@
 // in a shard and be able to reconstruct your data if you have the needed number of shards left.
 
 // package reedsolomon
-package main
+package reedsolomon
 
 import (
 	"flag"
