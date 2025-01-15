@@ -200,9 +200,15 @@ func MakeDataMap(originalFilePath string, distributedFile []DistributedFile) err
 	if err != nil {
 		return fmt.Errorf("failed to create directory: %v", err)
 	}
-	err = os.WriteFile(jsonFilePath, dataMap, 0644)
+	file, err := os.OpenFile(jsonFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return fmt.Errorf("failed to write JSON file: %v", err)
+		return fmt.Errorf("failed to open file: %v", err)
+	}
+	defer file.Close()
+
+	_, err = file.Write(dataMap)
+	if err != nil {
+		return fmt.Errorf("failed to write data: %v", err)
 	}
 
 	return nil
@@ -227,7 +233,7 @@ func calculateChecksum(filePath string) (string, error) {
 // return filename
 func GetDistributedFile() ([]string, error) {
 	FilePath := "/Users/iyeeun/Desktop/datamap.json"
-
+	fmt.Printf("hellohello\n")
 	// 파일 열기
 	file, err := os.Open(FilePath)
 	if err != nil {
