@@ -218,22 +218,30 @@ func calculateChecksum(filePath string) (string, error) {
 }
 
 // return filename
-func GetDistributedFile() (string, error) {
+func GetDistributedFile() ([]string, error) {
 	FilePath := "/Users/iyeeun/Desktop/datamap.json"
 
+	// 파일 열기
 	file, err := os.Open(FilePath)
 	if err != nil {
-		return "", fmt.Errorf("failed to open file : %v", err)
+		return nil, fmt.Errorf("failed to open file : %v", err)
 	}
 	defer file.Close()
 
-	var data DistributedFile
+	// Json파일 열어서 디코딩
+	var data []DistributedFile
 	decoder := json.NewDecoder(file)
 	ero := decoder.Decode(&data)
 	if ero != nil {
-		return "", fmt.Errorf("json 디코딩 실패 %v", ero)
+		return nil, fmt.Errorf("json 디코딩 실패 %v", ero)
 	}
 
-	return data.OriginalFileName, nil
+	// 모든 original_file_name 수집
+	var fileNames []string
+	for _, item := range data {
+		fileNames = append(fileNames, item.OriginalFileName)
+	}
+
+	return fileNames, nil
 
 }
