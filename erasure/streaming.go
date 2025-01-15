@@ -608,7 +608,7 @@ var _ io.Reader = &zeroPaddingReader{}
 func (t zeroPaddingReader) Read(p []byte) (n int, err error) {
 	n = len(p)
 	for i := 0; i < n; i++ {
-		p[i] = 0
+		p[i] = '\t'
 	}
 	return n, nil
 }
