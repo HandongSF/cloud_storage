@@ -38,17 +38,27 @@ func Dis_Upload(args []string) (err error) {
 			return fmt.Errorf("error in Dis_Upload for file %s: %w", source, err)
 		}
 
-		filename := filepath.Base(source)
-		distributionFile, err := GetDistributedInfo(filename, Remote{remotes[rr_counter].Name, remotes[rr_counter].Type})
-		distributedFileArray[i] = distributionFile
+		shardFullPath, err := GetFullPath(source)
+		if err != nil {
+			return err
+		}
 
+		distributionFile, err := GetDistributedInfo(shardFullPath, Remote{remotes[rr_counter].Name, remotes[rr_counter].Type})
 		if err != nil {
 			return fmt.Errorf("error in GetDistributedInfo %s: %w", source, err)
 		}
+
+		distributedFileArray[i] = distributionFile
 		rr_counter = (rr_counter + 1) % len(remotes)
 	}
 
-	fmt.Printf("Completed Dis_Upload\n")
+	originalFileFullPath, err := GetFullPath(args[0])
+	if err != nil {
+		return err
+	}
+
+	MakeDataMap(originalFileFullPath, distributedFileArray)
+	fmt.Printf("Completed Dis_Upload!\n")
 	return nil
 }
 
@@ -86,6 +96,19 @@ var commandDefinition = &cobra.Command{
 			return operations.CopyFile(context.Background(), fdst, fsrc, srcFileName, srcFileName)
 		}, true)
 	},
+}
+
+func GetFullPath(source string) (string, error) {
+	// Get the current working directory
+	currentDir, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current directory: %v", err)
+	}
+
+	// Join the current directory with the source file path
+	fullPath := filepath.Join(currentDir, source)
+
+	return fullPath, nil
 }
 
 func dis_init(arg string) (err error) {
