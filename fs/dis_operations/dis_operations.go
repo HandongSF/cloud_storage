@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/rclone/rclone/cmd"
+	"github.com/rclone/rclone/fs"
 	"github.com/rclone/rclone/fs/config"
 	"github.com/rclone/rclone/fs/operations"
 	"github.com/rclone/rclone/fs/sync"
@@ -70,6 +71,27 @@ func remoteCallCopy(args []string) (err error) {
 	}
 
 	return nil
+}
+
+var (
+	createEmptySrcDirs = false
+)
+
+var commandDefinition = &cobra.Command{
+	Use: "copy source:path dest:path",
+	Annotations: map[string]string{
+		"groups": "Copy,Filter,Listing,Important",
+	},
+	Run: func(command *cobra.Command, args []string) {
+		cmd.CheckArgs(2, 2, command, args)
+		fsrc, srcFileName, fdst := cmd.NewFsSrcFileDst(args)
+		cmd.RunWithSustainOS(true, true, command, func() error {
+			if srcFileName == "" {
+				return sync.CopyDir(context.Background(), fdst, fsrc, createEmptySrcDirs)
+			}
+			return operations.CopyFile(context.Background(), fdst, fsrc, srcFileName, srcFileName)
+		}, true)
+	},
 }
 
 func dis_init(arg string) (err error) {
@@ -147,33 +169,45 @@ func MakeDataMap(originalFilePath string, distributedFile []DistributedFile) err
 		return fmt.Errorf("failed to calculate checksum: %v", err)
 	}
 
-	fileInfo := FileInfo{
+	newFileInfo := FileInfo{
 		FileName:             originalFileName,
 		FileSize:             originalFileSize,
 		Checksum:             checksum,
 		DistributedFileInfos: distributedFile,
 	}
 
-	// Marshal to JSON
-	dataMap, err := json.MarshalIndent(fileInfo, "", "  ")
+	// Read existing JSON data if the file exists
+	var fileInfos []FileInfo
+	if _, err := os.Stat(jsonFilePath); err == nil {
+		file, err := os.Open(jsonFilePath)
+		if err != nil {
+			return fmt.Errorf("failed to open JSON file: %v", err)
+		}
+		defer file.Close()
+
+		err = json.NewDecoder(file).Decode(&fileInfos)
+		if err != nil && !errors.Is(err, io.EOF) {
+			return fmt.Errorf("failed to decode existing JSON: %v", err)
+		}
+	}
+
+	// Append the new file info to the array
+	fileInfos = append(fileInfos, newFileInfo)
+
+	// Marshal the updated array back to JSON
+	dataMap, err := json.MarshalIndent(fileInfos, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal JSON: %v", err)
 	}
 
-	// Write JSON data to the file (create or overwrite)
+	// Write JSON data to the file (overwrite)
 	err = os.MkdirAll(filepath.Dir(jsonFilePath), os.ModePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create directory: %v", err)
 	}
-	file, err := os.OpenFile(jsonFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	err = os.WriteFile(jsonFilePath, dataMap, 0644)
 	if err != nil {
-		return fmt.Errorf("failed to open file: %v", err)
-	}
-	defer file.Close()
-
-	_, err = file.Write(dataMap)
-	if err != nil {
-		return fmt.Errorf("failed to write data: %v", err)
+		return fmt.Errorf("failed to write JSON file: %v", err)
 	}
 
 	return nil
@@ -198,7 +232,6 @@ func calculateChecksum(filePath string) (string, error) {
 // return filename
 func GetDistributedFile() ([]string, error) {
 	FilePath := "/Users/iyeeun/Desktop/datamap.json"
-	fmt.Printf("hellohello\n")
 	// 파일 열기
 	file, err := os.Open(FilePath)
 	if err != nil {
@@ -224,23 +257,70 @@ func GetDistributedFile() ([]string, error) {
 
 }
 
-var (
-	createEmptySrcDirs = false
-)
+func Dis_Remove(arg []string) (err error) {
+	//일단 list에 존재하는지 확인
+	fmt.Printf(arg[0] + "\n")
+	listOfFiles, err := GetDistributedFile()
+	if err != nil {
+		return fmt.Errorf("GetDistributedFile failed %v", err)
+	}
+	fmt.Printf("number of files: %d\n", len(listOfFiles))
 
-var commandDefinition = &cobra.Command{
-	Use: "copy source:path dest:path",
+	check := false
+
+	// for _, name := range listOfFiles {
+	// 	fmt.Printf("check: " + name + "\n")
+	// }
+
+	for _, name := range listOfFiles {
+		fmt.Printf("name: "+name, "\n")
+		if name == arg[0] {
+			check = true
+		}
+	}
+
+	if !check {
+		return fmt.Errorf("%s not found", arg[0])
+	} else {
+		remoteCallDeleteFile(arg)
+	}
+
+	return nil
+
+}
+
+func remoteCallDeleteFile(args []string) (err error) {
+	fmt.Printf("Calling remoteCallDeleteFile with args: %v\n", args)
+
+	deleteFileCommand := *deleteFileDefinition
+	deleteFileCommand.SetArgs(args)
+
+	err = deleteFileCommand.Execute()
+	if err != nil {
+		return fmt.Errorf("error executing copyCommand: %w", err)
+	}
+
+	return nil
+}
+
+var deleteFileDefinition = &cobra.Command{
+	Use: "deletefile remote:path",
 	Annotations: map[string]string{
-		"groups": "Copy,Filter,Listing,Important",
+		"versionIntroduced": "v1.42",
+		"groups":            "Important",
 	},
 	Run: func(command *cobra.Command, args []string) {
-		cmd.CheckArgs(2, 2, command, args)
-		fsrc, srcFileName, fdst := cmd.NewFsSrcFileDst(args)
-		cmd.RunWithSustainOS(true, true, command, func() error {
-			if srcFileName == "" {
-				return sync.CopyDir(context.Background(), fdst, fsrc, createEmptySrcDirs)
+		cmd.CheckArgs(1, 1, command, args)
+		f, fileName := cmd.NewFsFile(args[0])
+		cmd.Run(true, false, command, func() error {
+			if fileName == "" {
+				return fmt.Errorf("%s is a directory or doesn't exist: %w", args[0], fs.ErrorObjectNotFound)
 			}
-			return operations.CopyFile(context.Background(), fdst, fsrc, srcFileName, srcFileName)
-		}, true)
+			fileObj, err := f.NewObject(context.Background(), fileName)
+			if err != nil {
+				return err
+			}
+			return operations.DeleteFile(context.Background(), fileObj)
+		})
 	},
 }
