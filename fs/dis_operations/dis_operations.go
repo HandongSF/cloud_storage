@@ -19,27 +19,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var remoteDirectory = "Distribution"
-
-type DistributedFile struct {
-	OriginalFileName string `json:"original_file_name"`
-	DistributedFile  string `json:"distributed_file_name"`
-	DisFileSize      int64  `json:"distributed_file_size"`
-	remote           Remote
-}
-
-type FileInfo struct {
-	FileName             string            `json:"original_file_name"`
-	FileSize             int64             `json:"original_file_size"`
-	Checksum             string            `json:"checksum"`
-	DistributedFileInfos []DistributedFile `json:"distributed_file_infos"`
-}
-
-type Remote struct {
-	Name string `json:"remote_name"`
-	Type string `json:"remote_type"`
-}
-
 func Dis_Upload(args []string) (err error) {
 	// Check if file exists, if yes, create directory with same name
 	err = dis_init(args[0])
@@ -49,23 +28,29 @@ func Dis_Upload(args []string) (err error) {
 
 	dis_names, shardSize := reedsolomon.DoEncode(args[0])
 	remotes := config.GetRemoteNames()
+	distributedFileArray := make([]DistributedFile, len(dis_names))
+	rr_counter := 0 // Round Robin
 
-	counter := 0
-	for _, source := range dis_names {
+	for i, source := range dis_names {
 
-		dest := fmt.Sprintf("%s:%s", remotes[counter], remoteDirectory)
+		dest := fmt.Sprintf("%s:%s", remotes[i], remoteDirectory)
 
 		fmt.Printf("Uploading file %s to %s of size %d\n", source, dest, shardSize)
 
-		tempArgs := []string{source, dest}
-
 		// Perform the upload
-		err = remoteCallCopy(tempArgs)
+		err = remoteCallCopy([]string{source, dest})
 		if err != nil {
 			return fmt.Errorf("error in Dis_Upload for file %s: %w", source, err)
 		}
 
-		counter = (counter + 1) % len(remotes)
+		filename := filepath.Base(source)
+		distributionFile, err := GetDistributedInfo(filename, Remote{remotes[rr_counter], ""})
+		distributedFileArray[i] = distributionFile
+
+		if err != nil {
+			return fmt.Errorf("error in GetDistributedInfo %s: %w", source, err)
+		}
+		rr_counter = (rr_counter + 1) % len(remotes)
 	}
 
 	fmt.Printf("Completed Dis_Upload\n")
@@ -87,27 +72,6 @@ func remoteCallCopy(args []string) (err error) {
 	return nil
 }
 
-var (
-	createEmptySrcDirs = false
-)
-
-var commandDefinition = &cobra.Command{
-	Use: "copy source:path dest:path",
-	Annotations: map[string]string{
-		"groups": "Copy,Filter,Listing,Important",
-	},
-	Run: func(command *cobra.Command, args []string) {
-		cmd.CheckArgs(2, 2, command, args)
-		fsrc, srcFileName, fdst := cmd.NewFsSrcFileDst(args)
-		cmd.RunWithSustainOS(true, true, command, func() error {
-			if srcFileName == "" {
-				return sync.CopyDir(context.Background(), fdst, fsrc, createEmptySrcDirs)
-			}
-			return operations.CopyFile(context.Background(), fdst, fsrc, srcFileName, srcFileName)
-		}, true)
-	},
-}
-
 func dis_init(arg string) (err error) {
 	path, err := os.Getwd()
 	if err != nil {
@@ -125,6 +89,7 @@ func dis_init(arg string) (err error) {
 	// 존재한다면 ok 메세지 cmd창에 출력
 	fmt.Println("Success to find file : ", fi)
 
+	// 해당 코드 필요 없을 수 있음. Reedsolomon에서 생성하는 shard file에 shard 생성
 	// 유저가 현재 위치한 로컬 디렉토리에(path) 파일이름으로 디렉토리 생성
 	//fileBase := strings.TrimSuffix(arg, filepath.Ext(arg))
 	//dirPath := filepath.Join(path, fileBase+"_dir")
@@ -257,4 +222,25 @@ func GetDistributedFile() ([]string, error) {
 
 	return fileNames, nil
 
+}
+
+var (
+	createEmptySrcDirs = false
+)
+
+var commandDefinition = &cobra.Command{
+	Use: "copy source:path dest:path",
+	Annotations: map[string]string{
+		"groups": "Copy,Filter,Listing,Important",
+	},
+	Run: func(command *cobra.Command, args []string) {
+		cmd.CheckArgs(2, 2, command, args)
+		fsrc, srcFileName, fdst := cmd.NewFsSrcFileDst(args)
+		cmd.RunWithSustainOS(true, true, command, func() error {
+			if srcFileName == "" {
+				return sync.CopyDir(context.Background(), fdst, fsrc, createEmptySrcDirs)
+			}
+			return operations.CopyFile(context.Background(), fdst, fsrc, srcFileName, srcFileName)
+		}, true)
+	},
 }
