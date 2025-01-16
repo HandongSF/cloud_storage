@@ -3,7 +3,7 @@ package dis_operations
 type DistributedFile struct {
 	DistributedFile string `json:"distributed_file_name"`
 	DisFileSize     int64  `json:"distributed_file_size"`
-	remote          Remote
+	Remote          Remote `json:"remote"`
 }
 
 type FileInfo struct {

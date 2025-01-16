@@ -25,7 +25,7 @@ func GetDistributedInfo(filePath string, remote Remote) (DistributedFile, error)
 	return DistributedFile{
 		DistributedFile: filepath.Base(filePath),
 		DisFileSize:     fileInfo.Size(),
-		remote:          remote,
+		Remote:          remote,
 	}, nil
 
 }
