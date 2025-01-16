@@ -99,7 +99,9 @@ func TestCalculateChecksum(t *testing.T) {
 func TestGetDistributedFile(t *testing.T) {
 	listOfFile, err := GetDistributedFile()
 	if err == nil {
-		fmt.Printf(listOfFile)
+		for idx, name := range listOfFile {
+			fmt.Printf("%d : %s\n", idx+1, name)
+		}
 	} else {
 		t.Errorf("get distributed file name failed %v", err)
 	}
