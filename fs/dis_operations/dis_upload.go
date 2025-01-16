@@ -28,7 +28,7 @@ func Dis_Upload(args []string) (err error) {
 
 	for i, source := range dis_names {
 
-		dest := fmt.Sprintf("%s:%s", remotes[rr_counter], remoteDirectory)
+		dest := fmt.Sprintf("%s:%s", remotes[rr_counter].Name, remoteDirectory)
 
 		fmt.Printf("Uploading file %s to %s of size %d\n", source, dest, shardSize)
 
