@@ -68,7 +68,7 @@ func TestMakeDataMap(t *testing.T) {
 	if err != nil {
 		fmt.Errorf("failed to find Path: %v", err)
 	}
-	jsonFilePath = filepath.Join(jsonFilePath, "data")
+	jsonFilePath = filepath.Join(jsonFilePath, "data", "datamap.json")
 	if _, err := os.Stat(jsonFilePath); os.IsNotExist(err) {
 		t.Errorf("Expected JSON file to be created at %s, but it does not exist", jsonFilePath)
 	}

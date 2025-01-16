@@ -40,7 +40,7 @@ func MakeDataMap(originalFilePath string, distributedFile []DistributedFile) err
 	if err != nil {
 		return fmt.Errorf("failed to find Path: %v", err)
 	}
-	jsonFilePath = filepath.Join(jsonFilePath, "data")
+	jsonFilePath = filepath.Join(jsonFilePath, "data", "datamap.json")
 	fmt.Println("Updated Path:", jsonFilePath)
 
 	originalFileName := filepath.Base(originalFilePath)
