@@ -1,0 +1,115 @@
+package dis_operations
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+)
+
+func GetDistributedInfo(fileName string, remote Remote) (DistributedFile, error) {
+	if fileName == "" {
+		return DistributedFile{}, errors.New("FileName cannot be empty")
+	}
+
+	// we don't know yet
+	distributedFilePath := "/Users/iyeeun/Desktop/cloud_storage_rclone/erasure/test.jpg.86"
+
+	fileInfo, err := os.Stat(distributedFilePath)
+
+	if err != nil {
+		return DistributedFile{}, fmt.Errorf("failed to stat file %s: %v", distributedFilePath, err)
+	}
+
+	return DistributedFile{
+		DistributedFile: fileName,
+		DisFileSize:     fileInfo.Size(),
+		remote:          remote,
+	}, nil
+
+}
+
+// MakeDataMap makes file info json
+func MakeDataMap(originalFilePath string, distributedFile []DistributedFile) error {
+	if originalFilePath == "" {
+		return errors.New("originalFilePath cannot be empty")
+	}
+	//you have to change on you side!!!
+	jsonFilePath := "/Users/iyeeun/Desktop/datamap.json"
+
+	originalFileName := filepath.Base(originalFilePath)
+
+	originalFileInfo, err := os.Stat(originalFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to stat original file: %v", err)
+	}
+	originalFileSize := originalFileInfo.Size()
+
+	checksum, err := calculateChecksum(originalFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to calculate checksum: %v", err)
+	}
+
+	newFileInfo := FileInfo{
+		FileName:             originalFileName,
+		FileSize:             originalFileSize,
+		Checksum:             checksum,
+		DistributedFileInfos: distributedFile,
+	}
+
+	// Read existing JSON data if the file exists
+	var fileInfos []FileInfo
+	if _, err := os.Stat(jsonFilePath); err == nil {
+		file, err := os.Open(jsonFilePath)
+		if err != nil {
+			return fmt.Errorf("failed to open JSON file: %v", err)
+		}
+		defer file.Close()
+
+		err = json.NewDecoder(file).Decode(&fileInfos)
+		if err != nil && !errors.Is(err, io.EOF) {
+			return fmt.Errorf("failed to decode existing JSON: %v", err)
+		}
+	}
+
+	// Append the new file info to the array
+	fileInfos = append(fileInfos, newFileInfo)
+
+	// Marshal the updated array back to JSON
+	dataMap, err := json.MarshalIndent(fileInfos, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal JSON: %v", err)
+	}
+
+	// Write JSON data to the file (overwrite)
+	err = os.MkdirAll(filepath.Dir(jsonFilePath), os.ModePerm)
+	if err != nil {
+		return fmt.Errorf("failed to create directory: %v", err)
+	}
+	err = os.WriteFile(jsonFilePath, dataMap, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write JSON file: %v", err)
+	}
+
+	return nil
+
+}
+
+// calculateChecksum computes the SHA256 checksum of a file's contents.
+func calculateChecksum(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open file for checksum: %v", err)
+	}
+	defer file.Close()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", fmt.Errorf("failed to compute checksum: %v", err)
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}

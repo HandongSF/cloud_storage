@@ -1,7 +1,6 @@
 package dis_operations
 
 import (
-	"fmt"
 	"os"
 	"testing"
 )
@@ -95,18 +94,3 @@ func TestCalculateChecksum(t *testing.T) {
 		t.Errorf("Expected checksum: %s, but got: %s", expectedChecksum, checksum)
 	}
 }
-
-func TestGetDistributedFile(t *testing.T) {
-	listOfFile, err := GetDistributedFile()
-	if err == nil {
-		for idx, name := range listOfFile {
-			fmt.Printf("%d : %s\n", idx+1, name)
-		}
-	} else {
-		t.Errorf("get distributed file name failed %v", err)
-	}
-}
-
-// func TestFullSequence(t *testing.T) {
-// 	original_img_path :=
-// }
