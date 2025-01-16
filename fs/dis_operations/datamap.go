@@ -11,22 +11,19 @@ import (
 	"path/filepath"
 )
 
-func GetDistributedInfo(fileName string, remote Remote) (DistributedFile, error) {
-	if fileName == "" {
+func GetDistributedInfo(filePath string, remote Remote) (DistributedFile, error) {
+	if filePath == "" {
 		return DistributedFile{}, errors.New("FileName cannot be empty")
 	}
 
-	// we don't know yet
-	distributedFilePath := "/Users/iyeeun/Desktop/cloud_storage_rclone/erasure/test.jpg.86"
-
-	fileInfo, err := os.Stat(distributedFilePath)
+	fileInfo, err := os.Stat(filePath)
 
 	if err != nil {
-		return DistributedFile{}, fmt.Errorf("failed to stat file %s: %v", distributedFilePath, err)
+		return DistributedFile{}, fmt.Errorf("failed to stat file %s: %v", filePath, err)
 	}
 
 	return DistributedFile{
-		DistributedFile: fileName,
+		DistributedFile: filepath.Base(filePath),
 		DisFileSize:     fileInfo.Size(),
 		remote:          remote,
 	}, nil
@@ -38,8 +35,13 @@ func MakeDataMap(originalFilePath string, distributedFile []DistributedFile) err
 	if originalFilePath == "" {
 		return errors.New("originalFilePath cannot be empty")
 	}
-	//you have to change on you side!!!
-	jsonFilePath := "/Users/iyeeun/Desktop/datamap.json"
+
+	jsonFilePath, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to find Path: %v", err)
+	}
+	jsonFilePath = filepath.Join(jsonFilePath, "data")
+	fmt.Println("Updated Path:", jsonFilePath)
 
 	originalFileName := filepath.Base(originalFilePath)
 

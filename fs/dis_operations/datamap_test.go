@@ -1,7 +1,9 @@
 package dis_operations
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -61,8 +63,12 @@ func TestMakeDataMap(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected no error, but got: %v", err)
 	}
-	// you have to change on your side!!
-	jsonFilePath := "/Users/iyeeun/Desktop"
+
+	jsonFilePath, err := os.Getwd()
+	if err != nil {
+		fmt.Errorf("failed to find Path: %v", err)
+	}
+	jsonFilePath = filepath.Join(jsonFilePath, "data")
 	if _, err := os.Stat(jsonFilePath); os.IsNotExist(err) {
 		t.Errorf("Expected JSON file to be created at %s, but it does not exist", jsonFilePath)
 	}
@@ -71,7 +77,7 @@ func TestMakeDataMap(t *testing.T) {
 
 func TestCalculateChecksum(t *testing.T) {
 	// you have to change on your side!!
-	tempFile, err := os.CreateTemp("/Users/iyeeun/Desktop", "testfile_*.txt")
+	tempFile, err := os.CreateTemp("", "testfile_*.txt")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
