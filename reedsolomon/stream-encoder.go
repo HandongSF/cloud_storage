@@ -29,9 +29,10 @@ import (
 	"github.com/klauspost/reedsolomon"
 )
 
+var shardDir = "shard"
 var dataShards = flag.Int("data", 10, "Number of shards to split the data into, must be below 257.")
 var parShards = flag.Int("par", 2, "Number of parity shards")
-var outDir = flag.String("out", "shard", "Alternative output directory")
+var outDir = flag.String("out", shardDir, "Alternative output directory")
 
 func init() {
 	flag.Usage = func() {
@@ -42,10 +43,27 @@ func init() {
 	}
 }
 
+func GetShardDir() (string, error) {
+
+	path, err := os.Getwd()
+
+	if err != nil {
+		return "", err
+
+	}
+	filepath := filepath.Join(path, "shard")
+
+	return filepath, nil
+
+}
+
 func DoEncode(fname string) ([]string, int) {
 	var paths []string
 
-	err := os.Mkdir(*outDir, 0755)
+	if _, err := os.Stat(*outDir); os.IsNotExist(err) {
+		err := os.Mkdir(*outDir, 0755)
+		checkErr(err)
+	}
 
 	if (*dataShards + *parShards) > 256 {
 		fmt.Fprintf(os.Stderr, "Error: sum of data and parity shards cannot exceed 256\n")
