@@ -4,11 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 // return filename
 func GetDistributedFile() ([]string, error) {
-	FilePath := "/Users/iyeeun/Desktop/datamap.json"
+	FilePath := ""
+	FilePath, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("failed to find Path: %v", err)
+	}
+	FilePath = filepath.Join(FilePath, "data", "datamap.json")
 	// 파일 열기
 	file, err := os.Open(FilePath)
 	if err != nil {
@@ -27,7 +33,7 @@ func GetDistributedFile() ([]string, error) {
 	// 모든 original_file_name 수집
 	var fileNames []string
 	for _, item := range data {
-		fileNames = append(fileNames, item.OriginalFileName)
+		fileNames = append(fileNames, item.DistributedFile)
 	}
 
 	return fileNames, nil
