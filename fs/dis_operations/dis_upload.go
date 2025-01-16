@@ -58,7 +58,7 @@ func Dis_Upload(args []string) (err error) {
 	}
 
 	MakeDataMap(originalFileFullPath, distributedFileArray)
-	fmt.Printf("Completed Dis_Upload\n")
+	fmt.Printf("Completed Dis_Upload!\n")
 	return nil
 }
 
