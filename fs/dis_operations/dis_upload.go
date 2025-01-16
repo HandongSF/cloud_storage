@@ -22,13 +22,13 @@ func Dis_Upload(args []string) (err error) {
 	}
 
 	dis_names, shardSize := reedsolomon.DoEncode(args[0])
-	remotes := config.GetRemoteNames()
+	remotes := config.GetRemotes()
 	distributedFileArray := make([]DistributedFile, len(dis_names))
 	rr_counter := 0 // Round Robin
 
 	for i, source := range dis_names {
 
-		dest := fmt.Sprintf("%s:%s", remotes[i], remoteDirectory)
+		dest := fmt.Sprintf("%s:%s", remotes[rr_counter], remoteDirectory)
 
 		fmt.Printf("Uploading file %s to %s of size %d\n", source, dest, shardSize)
 
@@ -39,7 +39,7 @@ func Dis_Upload(args []string) (err error) {
 		}
 
 		filename := filepath.Base(source)
-		distributionFile, err := GetDistributedInfo(filename, Remote{remotes[rr_counter], ""})
+		distributionFile, err := GetDistributedInfo(filename, Remote{remotes[rr_counter].Name, remotes[rr_counter].Type})
 		distributedFileArray[i] = distributionFile
 
 		if err != nil {
