@@ -31,6 +31,7 @@ require (
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/dop251/scsu v0.0.0-20220106150536-84ac88021d00
 	github.com/dropbox/dropbox-sdk-go-unofficial/v6 v6.0.5
+	github.com/flew-software/filecrypt v1.1.0
 	github.com/gabriel-vasile/mimetype v1.4.7
 	github.com/gdamore/tcell/v2 v2.7.4
 	github.com/go-chi/chi/v5 v5.1.0
@@ -93,6 +94,7 @@ require (
 	gopkg.in/validator.v2 v2.0.1
 	gopkg.in/yaml.v2 v2.4.0
 	storj.io/uplink v1.13.1
+
 )
 
 require (
