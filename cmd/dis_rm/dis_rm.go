@@ -11,7 +11,7 @@ func init() {
 }
 
 var commandDefinition = &cobra.Command{
-	Use:   "dis_remove file name",
+	Use:   "dis_rm fileName",
 	Short: `remove distributed file on registered remotes.`,
 	Long:  `Remove distributed file on registered remotes. `,
 	Annotations: map[string]string{
