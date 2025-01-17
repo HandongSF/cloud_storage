@@ -44,7 +44,7 @@ func Dis_Upload(args []string) (err error) {
 
 		wg.Add(1)
 
-		go func(i int, source string, dest string) {
+		go func(i, rr int, source string, dest string) {
 			defer wg.Done()
 
 			// Perform the upload (Via API Call)
@@ -62,7 +62,7 @@ func Dis_Upload(args []string) (err error) {
 			}
 
 			// Get the distributed info for the shard
-			distributionFile, err := GetDistributedInfo(shardFullPath, Remote{remotes[rr_counter].Name, remotes[rr_counter].Type})
+			distributionFile, err := GetDistributedInfo(shardFullPath, Remote{remotes[rr].Name, remotes[rr].Type})
 			if err != nil {
 				errs = append(errs, fmt.Errorf("error in GetDistributedInfo for %s: %w", source, err))
 				return
@@ -71,7 +71,7 @@ func Dis_Upload(args []string) (err error) {
 			mu.Lock()
 			distributedFileArray[i] = distributionFile
 			mu.Unlock()
-		}(i, source, dest)
+		}(i, rr_counter, source, dest)
 
 		mu.Lock()
 		rr_counter = (rr_counter + 1) % len(remotes)
