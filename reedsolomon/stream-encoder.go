@@ -15,7 +15,6 @@
 // If you save these properties, you should abe able to detect file corruption
 // in a shard and be able to reconstruct your data if you have the needed number of shards left.
 
-// package reedsolomon
 package reedsolomon
 
 import (
@@ -26,6 +25,7 @@ import (
 
 	"io"
 
+	v2 "github.com/flew-software/filecrypt"
 	"github.com/klauspost/reedsolomon"
 )
 
@@ -33,6 +33,16 @@ var shardDir = "shard"
 var dataShards = flag.Int("data", 10, "Number of shards to split the data into, must be below 257.")
 var parShards = flag.Int("par", 2, "Number of parity shards")
 var outDir = flag.String("out", shardDir, "Alternative output directory")
+var password = "hello"
+
+// var fileLocation = "./"
+
+const fileCryptExtension string = ".fcef"
+
+var app = v2.App{
+	FileCryptExtension: fileCryptExtension,
+	Overwrite:          true,
+}
 
 func init() {
 	flag.Usage = func() {
@@ -65,6 +75,9 @@ func DoEncode(fname string) ([]string, int) {
 		checkErr(err)
 	}
 
+	encFile, err := app.Encrypt(fname, v2.Passphrase(password))
+	checkErr(err)
+
 	if (*dataShards + *parShards) > 256 {
 		fmt.Fprintf(os.Stderr, "Error: sum of data and parity shards cannot exceed 256\n")
 		os.Exit(1)
@@ -74,8 +87,8 @@ func DoEncode(fname string) ([]string, int) {
 	enc, err := reedsolomon.NewStream(*dataShards, *parShards)
 	checkErr(err)
 
-	fmt.Println("Opening", fname)
-	f, err := os.Open(fname)
+	fmt.Println("Opening", encFile)
+	f, err := os.Open(encFile)
 	checkErr(err)
 
 	instat, err := f.Stat()
@@ -85,7 +98,7 @@ func DoEncode(fname string) ([]string, int) {
 	out := make([]*os.File, shards)
 
 	// Create the resulting files.
-	dir, file := filepath.Split(fname)
+	dir, file := filepath.Split(encFile)
 	if *outDir != "" {
 		dir = *outDir
 	}
@@ -140,6 +153,28 @@ func DoEncode(fname string) ([]string, int) {
 	checkErr(err)
 	fmt.Printf("File split into %d data + %d parity shards.\n", *dataShards, *parShards)
 	return paths, sizePerShard
+}
+
+func main() {
+	flag.Parse()
+	args := flag.Args()
+	if len(args) != 1 {
+		fmt.Fprintf(os.Stderr, "Error: No input filename given\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	fname := args[0]
+	paths, fileSize := DoEncode(fname)
+	fmt.Println("file size is", fileSize)
+
+	filepathshard, _ := GetShardDir()
+	fmt.Println("shard is at ", filepathshard)
+
+	fmt.Println("===== 결과 ======")
+	for i, path := range paths {
+		fmt.Println(i, ": ", path)
+	}
 }
 
 func checkErr(err error) {
