@@ -36,3 +36,32 @@ func GetDistributedFile() ([]string, error) {
 
 	return fileNames, nil
 }
+
+func GetDistributedFileStruct(fileName string) ([]DistributedFile, error) {
+	filePath := "data.json"
+
+	// open json file
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file : %v", err)
+	}
+	defer file.Close()
+
+	// Json file decoding
+	var files []FileInfo
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&files)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode JSON: %v", err)
+	}
+
+	// 주어진 파일 이름으로 검색
+	for _, file := range files {
+		if file.FileName == fileName {
+			return file.DistributedFileInfos, nil
+		}
+	}
+
+	// 파일 이름을 찾지 못한 경우
+	return nil, fmt.Errorf("file name '%s' not found", fileName)
+}
