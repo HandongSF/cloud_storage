@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/rclone/rclone/cmd"
+	"github.com/rclone/rclone/fs"
 	"github.com/rclone/rclone/fs/config"
 	"github.com/rclone/rclone/fs/operations"
 	rsync "github.com/rclone/rclone/fs/sync"
@@ -27,8 +29,13 @@ func Dis_Upload(args []string) (err error) {
 	distributedFileArray := make([]DistributedFile, len(dis_names))
 	rr_counter := 0 // Round Robin
 
+	err = MakeDistributionDir(remotes)
+	if err != nil {
+		return err
+	}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
+	var errs []error
 
 	for i, source := range dis_names {
 		// Prepare destination for the file upload
@@ -43,27 +50,21 @@ func Dis_Upload(args []string) (err error) {
 			// Perform the upload (Via API Call)
 			err := remoteCallCopy([]string{source, dest})
 			if err != nil {
-				mu.Lock()
-				fmt.Printf("error in Dis_Upload for file %s: %v\n", source, err)
-				mu.Unlock()
+				errs = append(errs, fmt.Errorf("error in Dis_Upload for file %s: %w", source, err))
 				return
 			}
 
 			// Get the full path of the shard
 			shardFullPath, err := GetFullPath(source)
 			if err != nil {
-				mu.Lock()
-				fmt.Printf("error getting full path for %s: %v\n", source, err)
-				mu.Unlock()
+				errs = append(errs, fmt.Errorf("error getting full path for %s: %w", source, err))
 				return
 			}
 
 			// Get the distributed info for the shard
 			distributionFile, err := GetDistributedInfo(shardFullPath, Remote{remotes[rr_counter].Name, remotes[rr_counter].Type})
 			if err != nil {
-				mu.Lock()
-				fmt.Printf("error in GetDistributedInfo for %s: %v\n", source, err)
-				mu.Unlock()
+				errs = append(errs, fmt.Errorf("error in GetDistributedInfo for %s: %w", source, err))
 				return
 			}
 
@@ -79,6 +80,10 @@ func Dis_Upload(args []string) (err error) {
 
 	wg.Wait()
 
+	if len(errs) > 0 {
+		return fmt.Errorf("errors occurred: %v", errs)
+	}
+
 	// Get the full path for the original file
 	originalFileFullPath, err := GetFullPath(args[0])
 	if err != nil {
@@ -91,11 +96,38 @@ func Dis_Upload(args []string) (err error) {
 	return nil
 }
 
+func MakeDistributionDir(remotes []config.Remote) (err error) {
+	var wg sync.WaitGroup
+	var errs []error
+	for _, remote := range remotes {
+		argument := fmt.Sprintf("%s:%s", remote.Name, remoteDirectory)
+		wg.Add(1)
+
+		go func(arg string) {
+			defer wg.Done()
+
+			err := remoteCallMkdir([]string{arg})
+			if err != nil {
+				errs = append(errs, fmt.Errorf("error creating directory at %s: %w", arg, err))
+				return
+			}
+		}(argument)
+	}
+
+	wg.Wait()
+
+	if len(errs) > 0 {
+		return fmt.Errorf("errors occurred: %v", errs)
+	}
+
+	return nil
+}
+
 func remoteCallCopy(args []string) (err error) {
 	fmt.Printf("Calling remoteCallCopy with args: %v\n", args)
 
 	// Fetch the copy command
-	copyCommand := *commandDefinition
+	copyCommand := *copyCommandDefinition
 	copyCommand.SetArgs(args)
 
 	err = copyCommand.Execute()
@@ -110,7 +142,7 @@ var (
 	createEmptySrcDirs = false
 )
 
-var commandDefinition = &cobra.Command{
+var copyCommandDefinition = &cobra.Command{
 	Use: "copy source:path dest:path",
 	Annotations: map[string]string{
 		"groups": "Copy,Filter,Listing,Important",
@@ -123,6 +155,39 @@ var commandDefinition = &cobra.Command{
 				return rsync.CopyDir(context.Background(), fdst, fsrc, createEmptySrcDirs)
 			}
 			return operations.CopyFile(context.Background(), fdst, fsrc, srcFileName, srcFileName)
+		}, true)
+	},
+}
+
+func remoteCallMkdir(args []string) (err error) {
+	fmt.Printf("Calling remoteCallMkdir with args: %v\n", args)
+
+	// Fetch the copy command
+	copyCommand := *mkdirCommandDefinition
+	copyCommand.SetArgs(args)
+
+	err = copyCommand.Execute()
+	if err != nil {
+		return fmt.Errorf("error executing mkdirCommand: %w", err)
+	}
+
+	return nil
+}
+
+var mkdirCommandDefinition = &cobra.Command{
+	Use:   "mkdir remote:path",
+	Short: `Make the path if it doesn't already exist.`,
+	Annotations: map[string]string{
+		"groups": "Important",
+	},
+	Run: func(command *cobra.Command, args []string) {
+		cmd.CheckArgs(1, 1, command, args)
+		fdst := cmd.NewFsDir(args)
+		if !fdst.Features().CanHaveEmptyDirectories && strings.Contains(fdst.Root(), "/") {
+			fs.Logf(fdst, "Warning: running mkdir on a remote which can't have empty directories does nothing")
+		}
+		cmd.RunWithSustainOS(true, false, command, func() error {
+			return operations.Mkdir(context.Background(), fdst, "")
 		}, true)
 	},
 }

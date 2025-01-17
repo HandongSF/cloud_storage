@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/rclone/rclone/cmd"
+	"github.com/rclone/rclone/fs/dis_operations"
 	"github.com/spf13/cobra"
 )
 
@@ -20,7 +21,7 @@ requested in full name, meaning that it must be followed with its extension.
 
 eg
 
-	rclone dis_download test.txt remote:path
+	rclone dis_download test.txt local:path
 
 
 Note that during this process, distributed binary files stored remote will be 
@@ -40,5 +41,8 @@ To erase the files, use the dis_rm command instead.
 	},
 	Run: func(command *cobra.Command, args []string) {
 		cmd.CheckArgs(2, 2, command, args)
+		cmd.Run(true, true, command, func() error {
+			return dis_operations.Dis_Download(args)
+		})
 	},
 }
