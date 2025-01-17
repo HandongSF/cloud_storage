@@ -5,17 +5,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/rclone/rclone/cmd"
 	"github.com/rclone/rclone/fs/config"
 	"github.com/rclone/rclone/fs/operations"
-	"github.com/rclone/rclone/fs/sync"
+	rsync "github.com/rclone/rclone/fs/sync"
 	"github.com/rclone/rclone/reedsolomon"
 	"github.com/spf13/cobra"
 )
 
 func Dis_Upload(args []string) (err error) {
-	// Check if file exists, if yes, create directory with same name
+	// Check if file exists
 	err = dis_init(args[0])
 	if err != nil {
 		return err
@@ -26,37 +27,65 @@ func Dis_Upload(args []string) (err error) {
 	distributedFileArray := make([]DistributedFile, len(dis_names))
 	rr_counter := 0 // Round Robin
 
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
 	for i, source := range dis_names {
-
+		// Prepare destination for the file upload
 		dest := fmt.Sprintf("%s:%s", remotes[rr_counter].Name, remoteDirectory)
-
 		fmt.Printf("Uploading file %s to %s of size %d\n", source, dest, shardSize)
 
-		// Perform the upload
-		err = remoteCallCopy([]string{source, dest})
-		if err != nil {
-			return fmt.Errorf("error in Dis_Upload for file %s: %w", source, err)
-		}
+		wg.Add(1)
 
-		shardFullPath, err := GetFullPath(source)
-		if err != nil {
-			return err
-		}
+		go func(i int, source string, dest string) {
+			defer wg.Done()
 
-		distributionFile, err := GetDistributedInfo(shardFullPath, Remote{remotes[rr_counter].Name, remotes[rr_counter].Type})
-		if err != nil {
-			return fmt.Errorf("error in GetDistributedInfo %s: %w", source, err)
-		}
+			// Perform the upload (Via API Call)
+			err := remoteCallCopy([]string{source, dest})
+			if err != nil {
+				mu.Lock()
+				fmt.Printf("error in Dis_Upload for file %s: %v\n", source, err)
+				mu.Unlock()
+				return
+			}
 
-		distributedFileArray[i] = distributionFile
+			// Get the full path of the shard
+			shardFullPath, err := GetFullPath(source)
+			if err != nil {
+				mu.Lock()
+				fmt.Printf("error getting full path for %s: %v\n", source, err)
+				mu.Unlock()
+				return
+			}
+
+			// Get the distributed info for the shard
+			distributionFile, err := GetDistributedInfo(shardFullPath, Remote{remotes[rr_counter].Name, remotes[rr_counter].Type})
+			if err != nil {
+				mu.Lock()
+				fmt.Printf("error in GetDistributedInfo for %s: %v\n", source, err)
+				mu.Unlock()
+				return
+			}
+
+			mu.Lock()
+			distributedFileArray[i] = distributionFile
+			mu.Unlock()
+		}(i, source, dest)
+
+		mu.Lock()
 		rr_counter = (rr_counter + 1) % len(remotes)
+		mu.Unlock()
 	}
 
+	wg.Wait()
+
+	// Get the full path for the original file
 	originalFileFullPath, err := GetFullPath(args[0])
 	if err != nil {
 		return err
 	}
 
+	// Make the data map using the distributed files
 	MakeDataMap(originalFileFullPath, distributedFileArray)
 	fmt.Printf("Completed Dis_Upload!\n")
 	return nil
@@ -91,7 +120,7 @@ var commandDefinition = &cobra.Command{
 		fsrc, srcFileName, fdst := cmd.NewFsSrcFileDst(args)
 		cmd.RunWithSustainOS(true, true, command, func() error {
 			if srcFileName == "" {
-				return sync.CopyDir(context.Background(), fdst, fsrc, createEmptySrcDirs)
+				return rsync.CopyDir(context.Background(), fdst, fsrc, createEmptySrcDirs)
 			}
 			return operations.CopyFile(context.Background(), fdst, fsrc, srcFileName, srcFileName)
 		}, true)
