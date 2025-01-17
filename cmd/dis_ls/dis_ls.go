@@ -16,9 +16,9 @@ func init() {
 
 var commandDefinition = &cobra.Command{
 	Use:   "dis_ls",
-	Short: `List the objects in the path with its name.`,
-	Long: `Lists the objects in the source path to standard output in a human
-readable format with its name. Recurses by default.
+	Short: `List the distributed objects in the path with its name.`,
+	Long: `Lists the distributed objects in the remote storage to standard output in a human
+readable format with its name. 
 
 Eg
 

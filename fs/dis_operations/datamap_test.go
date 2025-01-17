@@ -29,8 +29,8 @@ func TestGetDistributedInfo(t *testing.T) {
 	// 	t.Errorf("Expected file size to be 0, got: %d", distributedFile.DisFileSize)
 	// }
 
-	if distributedFile.remote != remote {
-		t.Errorf("Expected remote: %+v, but got: %+v", remote, distributedFile.remote)
+	if distributedFile.Remote != remote {
+		t.Errorf("Expected remote: %+v, but got: %+v", remote, distributedFile.Remote)
 	}
 
 }
@@ -52,7 +52,7 @@ func TestMakeDataMap(t *testing.T) {
 		{
 			DistributedFile: "test_distributed_file",
 			DisFileSize:     123,
-			remote: Remote{
+			Remote: Remote{
 				Name: "remote_server",
 				Type: "S3",
 			},
