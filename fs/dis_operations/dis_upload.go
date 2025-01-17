@@ -92,6 +92,10 @@ func Dis_Upload(args []string) (err error) {
 
 	// Make the data map using the distributed files
 	MakeDataMap(originalFileFullPath, distributedFileArray)
+
+	// Erase Temp Shards
+	reedsolomon.DeleteShardDir()
+
 	fmt.Printf("Completed Dis_Upload!\n")
 	return nil
 }
