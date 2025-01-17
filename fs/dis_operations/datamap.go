@@ -115,3 +115,48 @@ func calculateChecksum(filePath string) (string, error) {
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
+
+func RemoveFileFromMetadata(fileName string) error {
+	jsonFilePath, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to find Path: %v", err)
+	}
+	jsonFilePath = filepath.Join(jsonFilePath, "data", "datamap.json")
+	fmt.Println("Updated Path:", jsonFilePath)
+
+	file, err := os.Open(jsonFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to open metadata file: %v", err)
+	}
+	defer file.Close()
+
+	byteValue, err := os.ReadFile(jsonFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read metadata file: %v", err)
+	}
+
+	var metadata []FileInfo
+	if err := json.Unmarshal(byteValue, &metadata); err != nil {
+		return fmt.Errorf("failed to unmarshal metadata: %v", err)
+	}
+
+	newMetadata := []FileInfo{}
+	for _, fileInfo := range metadata {
+		if fileInfo.FileName != fileName {
+			newMetadata = append(newMetadata, fileInfo)
+		}
+	}
+
+	newByteValue, err := json.MarshalIndent(newMetadata, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal new metadata: %v", err)
+	}
+
+	// JSON 파일에 쓰기
+	if err := os.WriteFile(jsonFilePath, newByteValue, 0644); err != nil {
+		return fmt.Errorf("failed to write updated metadata file: %v", err)
+	}
+
+	return nil
+
+}
