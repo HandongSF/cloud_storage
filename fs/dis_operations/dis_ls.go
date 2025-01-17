@@ -22,18 +22,16 @@ func GetDistributedFile() ([]string, error) {
 	}
 	defer file.Close()
 
-	// Json파일 열어서 디코딩
-	var data []DistributedFile
+	var data []FileInfo
 	decoder := json.NewDecoder(file)
-	ero := decoder.Decode(&data)
-	if ero != nil {
-		return nil, fmt.Errorf("json 디코딩 실패 %v", ero)
+	err = decoder.Decode(&data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode JSON: %v", err)
 	}
 
-	// 모든 original_file_name 수집
 	var fileNames []string
 	for _, item := range data {
-		fileNames = append(fileNames, item.DistributedFile)
+		fileNames = append(fileNames, item.FileName)
 	}
 
 	return fileNames, nil
