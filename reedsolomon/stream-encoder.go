@@ -66,7 +66,6 @@ func GetShardDir() (string, error) {
 	return filepath, nil
 
 }
-
 func DeleteShardDir() {
 
 	dir, err := GetShardDir()
@@ -75,13 +74,21 @@ func DeleteShardDir() {
 		return
 	}
 
-	if err := os.RemoveAll(dir); err != nil {
-		fmt.Fprintf(os.Stderr, "Error deleting shard directory: %v\n", err)
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading shard directory: %v\n", err)
 		return
 	}
 
-	fmt.Println("Error : Kidding, It's deleted, I love you :)")
+	for _, file := range files {
+		filePath := filepath.Join(dir, file.Name())
+		if err := os.RemoveAll(filePath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error deleting file %s: %v\n", filePath, err)
+			continue
+		}
+	}
 
+	fmt.Println("Error : Kidding, It's deleted, I love you :)")
 }
 
 func DoEncode(fname string) ([]string, int) {
