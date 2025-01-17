@@ -38,10 +38,15 @@ func GetDistributedFile() ([]string, error) {
 }
 
 func GetDistributedFileStruct(fileName string) ([]DistributedFile, error) {
-	filePath := "data.json"
+	FilePath := ""
+	FilePath, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("failed to find Path: %v", err)
+	}
+	FilePath = filepath.Join(FilePath, "data", "datamap.json")
 
 	// open json file
-	file, err := os.Open(filePath)
+	file, err := os.Open(FilePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file : %v", err)
 	}
