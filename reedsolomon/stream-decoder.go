@@ -1,6 +1,3 @@
-//go:build ignore
-// +build ignore
-
 // Copyright 2015, Klaus Post, see LICENSE for details.
 //
 // Stream decoder example.
@@ -47,10 +44,7 @@ import (
 	"github.com/klauspost/reedsolomon"
 )
 
-var dataShards = flag.Int("data", 10, "Number of shards to split the data into")
-var parShards = flag.Int("par", 2, "Number of parity shards")
 var outFile = flag.String("out", "", "Alternative output path/file")
-var shardDir = flag.String("dir", "shard", "Directory containing shard files")
 
 func init() {
 	flag.Usage = func() {
@@ -83,7 +77,7 @@ func DoDecode(fname string) string {
 		out := make([]io.Writer, len(shards))
 		for i := range out {
 			if shards[i] == nil {
-				outfn := filepath.Join(*shardDir, fmt.Sprintf("%s.%d", fname, i))
+				outfn := filepath.Join(shardDir, fmt.Sprintf("%s.%d", fname, i))
 				fmt.Println("Creating", outfn)
 				out[i], err = os.Create(outfn)
 				checkErr(err)
@@ -155,7 +149,7 @@ func openInput(dataShards, parShards int, fname string) (r []io.Reader, size int
 	// Create shards and load the data.
 	shards := make([]io.Reader, dataShards+parShards)
 	for i := range shards {
-		infn := filepath.Join(*shardDir, fmt.Sprintf("%s.%d", fname, i))
+		infn := filepath.Join(shardDir, fmt.Sprintf("%s.%d", fname, i))
 		fmt.Println("Opening", infn)
 		f, err := os.Open(infn)
 		if err != nil {
@@ -174,11 +168,4 @@ func openInput(dataShards, parShards int, fname string) (r []io.Reader, size int
 		}
 	}
 	return shards, size, nil
-}
-
-func checkErr(err error) {
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s", err.Error())
-		os.Exit(2)
-	}
 }
