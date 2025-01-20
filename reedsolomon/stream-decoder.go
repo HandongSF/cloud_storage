@@ -61,16 +61,7 @@ func init() {
 	}
 }
 
-func main() {
-	// Parse flags
-	flag.Parse()
-	args := flag.Args()
-	if len(args) != 1 {
-		fmt.Fprintf(os.Stderr, "Error: No filenames given\n")
-		flag.Usage()
-		os.Exit(1)
-	}
-	fname := args[0]
+func DoDecode(fname string) string {
 
 	// Create matrix
 	enc, err := reedsolomon.NewStream(*dataShards, *parShards)
@@ -117,6 +108,7 @@ func main() {
 			os.Exit(1)
 		}
 		checkErr(err)
+
 	}
 
 	// Join the shards and write them
@@ -135,6 +127,28 @@ func main() {
 	// We don't know the exact filesize.
 	err = enc.Join(f, shards, int64(*dataShards)*size)
 	checkErr(err)
+
+	// Getting the absolute path for the output file
+	tmpPath, _ := os.Getwd()
+	filePath := filepath.Join(tmpPath, *outFile, fname)
+
+	return filePath
+}
+
+// main for the test
+func main() {
+	// Parse flags
+	flag.Parse()
+	args := flag.Args()
+	if len(args) != 1 {
+		fmt.Fprintf(os.Stderr, "Error: No filenames given\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+	fname := args[0]
+	savedPath := DoDecode(fname)
+	fmt.Println("Done, exit main")
+	fmt.Println("Path is : ", savedPath)
 }
 
 func openInput(dataShards, parShards int, fname string) (r []io.Reader, size int64, err error) {
