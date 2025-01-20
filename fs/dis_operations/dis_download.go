@@ -2,9 +2,9 @@ package dis_operations
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/rclone/rclone/reedsolomon"
-	//"sync"
 )
 
 func Dis_Download(args []string) (err error) {
@@ -24,27 +24,41 @@ func Dis_Download(args []string) (err error) {
 	}
 
 	// Get shards  via API call
-
-	//var mu sync.Mutex
-	//var wg sync.WaitGroup
 	shardDir, err := reedsolomon.GetShardDir()
 	if err != nil {
 		return err
 	}
-	for _, disFileStruct := range distributedFileInfos {
-		source := fmt.Sprintf("%s:%s", disFileStruct.Remote.Name, remoteDirectory)
-		fmt.Printf("Downloading shard %s to %s of size %d\n", source, args[1], disFileStruct.DisFileSize)
 
-		//wg.Add(1)
-		err := remoteCallCopy([]string{source, shardDir})
-		if err != nil {
-			fmt.Printf("error in Dis_Upload for file %s: %v\n", source, err)
-			return err
-		}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errs []error
+
+	for _, disFileStruct := range distributedFileInfos {
+		source := fmt.Sprintf("%s:%s/%s", disFileStruct.Remote.Name, remoteDirectory, disFileStruct.DistributedFile)
+		fmt.Printf("Downloading shard %s to %s of size %d\n", source, shardDir, disFileStruct.DisFileSize)
+
+		wg.Add(1)
+		go func(source, shardDir string) {
+			defer wg.Done()
+			if err := remoteCallCopy([]string{source, shardDir}); err != nil {
+				mu.Lock()
+				errs = append(errs, fmt.Errorf("error in remoteCallCopy for file %s: %v", source, err))
+				mu.Unlock()
+			}
+		}(source, shardDir)
 	}
+
+	wg.Wait()
+
+	if len(errs) > 0 {
+		return fmt.Errorf("errors occurred during download: %v", errs)
+	}
+
 	// Send to erasure coding to recover
+	modFileName := fmt.Sprintf("%s", args[0])
 
 	// Move downloaded file to destination
+	path := reedsolomon.DoDecode(modFileName)
 
 	return nil
 }
