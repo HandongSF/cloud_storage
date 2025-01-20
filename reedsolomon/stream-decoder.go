@@ -115,6 +115,8 @@ func DoDecode(fname string) string {
 	f, err := os.Create(outfn)
 	checkErr(err)
 
+	defer f.Close()
+
 	shards, size, err = openInput(*dataShards, *parShards, fname)
 	checkErr(err)
 
