@@ -99,8 +99,9 @@ func DoEncode(fname string) ([]string, int) {
 		checkErr(err)
 	}
 
-	encFile, err := app.Encrypt(fname, v2.Passphrase(password))
-	checkErr(err)
+	// encFile, err := app.Encrypt(fname, v2.Passphrase(password))
+	// checkErr(err)
+	encFile := fname
 
 	if (*dataShards + *parShards) > 256 {
 		fmt.Fprintf(os.Stderr, "Error: sum of data and parity shards cannot exceed 256\n")
