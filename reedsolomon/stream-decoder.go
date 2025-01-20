@@ -130,20 +130,20 @@ func DoDecode(fname string) string {
 }
 
 // main for the test
-func main() {
-	// Parse flags
-	flag.Parse()
-	args := flag.Args()
-	if len(args) != 1 {
-		fmt.Fprintf(os.Stderr, "Error: No filenames given\n")
-		flag.Usage()
-		os.Exit(1)
-	}
-	fname := args[0]
-	savedPath := DoDecode(fname)
-	fmt.Println("Done, exit main")
-	fmt.Println("Path is : ", savedPath)
-}
+// func main() {
+// 	// Parse flags
+// 	flag.Parse()
+// 	args := flag.Args()
+// 	if len(args) != 1 {
+// 		fmt.Fprintf(os.Stderr, "Error: No filenames given\n")
+// 		flag.Usage()
+// 		os.Exit(1)
+// 	}
+// 	fname := args[0]
+// 	savedPath := DoDecode(fname)
+// 	fmt.Println("Done, exit main")
+// 	fmt.Println("Path is : ", savedPath)
+// }
 
 func openInput(dataShards, parShards int, fname string) (r []io.Reader, size int64, err error) {
 	// Create shards and load the data.
