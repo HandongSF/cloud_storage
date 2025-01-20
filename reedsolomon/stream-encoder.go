@@ -123,14 +123,13 @@ func DoEncode(fname string) ([]string, int) {
 	out := make([]*os.File, shards)
 
 	// Create the resulting files.
-	dir, file := filepath.Split(encFile)
-	if *outDir != "" {
-		dir = *outDir
-	}
+	_, file := filepath.Split(encFile)
+
+
 	for i := range out {
 		outfn := fmt.Sprintf("%s.%d", file, i)
 		fmt.Println("Creating", outfn)
-		out[i], err = os.Create(filepath.Join(dir, outfn))
+		out[i], err = os.Create(filepath.Join(shardDir, outfn))
 		paths = append(paths, out[i].Name())
 
 		checkErr(err)
