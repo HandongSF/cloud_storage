@@ -1,6 +1,3 @@
-//go:build ignore
-// +build ignore
-
 // Copyright 2015, Klaus Post, see LICENSE for details.
 //
 // Stream decoder example.
@@ -47,10 +44,7 @@ import (
 	"github.com/klauspost/reedsolomon"
 )
 
-var dataShards = flag.Int("data", 10, "Number of shards to split the data into")
-var parShards = flag.Int("par", 2, "Number of parity shards")
 var outFile = flag.String("out", "", "Alternative output path/file")
-var shardDir = flag.String("dir", "shard", "Directory containing shard files")
 
 func init() {
 	flag.Usage = func() {
@@ -61,16 +55,7 @@ func init() {
 	}
 }
 
-func main() {
-	// Parse flags
-	flag.Parse()
-	args := flag.Args()
-	if len(args) != 1 {
-		fmt.Fprintf(os.Stderr, "Error: No filenames given\n")
-		flag.Usage()
-		os.Exit(1)
-	}
-	fname := args[0]
+func DoDecode(fname string) string {
 
 	// Create matrix
 	enc, err := reedsolomon.NewStream(*dataShards, *parShards)
@@ -92,7 +77,7 @@ func main() {
 		out := make([]io.Writer, len(shards))
 		for i := range out {
 			if shards[i] == nil {
-				outfn := filepath.Join(*shardDir, fmt.Sprintf("%s.%d", fname, i))
+				outfn := filepath.Join(shardDir, fmt.Sprintf("%s.%d", fname, i))
 				fmt.Println("Creating", outfn)
 				out[i], err = os.Create(outfn)
 				checkErr(err)
@@ -117,6 +102,7 @@ func main() {
 			os.Exit(1)
 		}
 		checkErr(err)
+
 	}
 
 	// Join the shards and write them
@@ -135,13 +121,35 @@ func main() {
 	// We don't know the exact filesize.
 	err = enc.Join(f, shards, int64(*dataShards)*size)
 	checkErr(err)
+
+	// Getting the absolute path for the output file
+	tmpPath, _ := os.Getwd()
+	filePath := filepath.Join(tmpPath, *outFile, fname)
+
+	return filePath
 }
+
+// main for the test
+// func main() {
+// 	// Parse flags
+// 	flag.Parse()
+// 	args := flag.Args()
+// 	if len(args) != 1 {
+// 		fmt.Fprintf(os.Stderr, "Error: No filenames given\n")
+// 		flag.Usage()
+// 		os.Exit(1)
+// 	}
+// 	fname := args[0]
+// 	savedPath := DoDecode(fname)
+// 	fmt.Println("Done, exit main")
+// 	fmt.Println("Path is : ", savedPath)
+// }
 
 func openInput(dataShards, parShards int, fname string) (r []io.Reader, size int64, err error) {
 	// Create shards and load the data.
 	shards := make([]io.Reader, dataShards+parShards)
 	for i := range shards {
-		infn := filepath.Join(*shardDir, fmt.Sprintf("%s.%d", fname, i))
+		infn := filepath.Join(shardDir, fmt.Sprintf("%s.%d", fname, i))
 		fmt.Println("Opening", infn)
 		f, err := os.Open(infn)
 		if err != nil {
@@ -160,11 +168,4 @@ func openInput(dataShards, parShards int, fname string) (r []io.Reader, size int
 		}
 	}
 	return shards, size, nil
-}
-
-func checkErr(err error) {
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s", err.Error())
-		os.Exit(2)
-	}
 }

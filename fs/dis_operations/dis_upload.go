@@ -50,7 +50,7 @@ func Dis_Upload(args []string) (err error) {
 			// Perform the upload (Via API Call)
 			err := remoteCallCopy([]string{source, dest})
 			if err != nil {
-				errs = append(errs, fmt.Errorf("error in Dis_Upload for file %s: %w", source, err))
+				errs = append(errs, fmt.Errorf("error in remoteCallCopy for file %s: %w", source, err))
 				return
 			}
 
@@ -92,6 +92,10 @@ func Dis_Upload(args []string) (err error) {
 
 	// Make the data map using the distributed files
 	MakeDataMap(originalFileFullPath, distributedFileArray)
+
+	// Erase Temp Shards
+	reedsolomon.DeleteShardDir()
+
 	fmt.Printf("Completed Dis_Upload!\n")
 	return nil
 }

@@ -32,7 +32,6 @@ import (
 var shardDir = "shard"
 var dataShards = flag.Int("data", 10, "Number of shards to split the data into, must be below 257.")
 var parShards = flag.Int("par", 2, "Number of parity shards")
-var outDir = flag.String("out", shardDir, "Alternative output directory")
 var password = "hello"
 
 // var fileLocation = "./"
@@ -94,8 +93,8 @@ func DeleteShardDir() {
 func DoEncode(fname string) ([]string, int) {
 	var paths []string
 
-	if _, err := os.Stat(*outDir); os.IsNotExist(err) {
-		err := os.Mkdir(*outDir, 0755)
+	if _, err := os.Stat(shardDir); os.IsNotExist(err) {
+		err := os.Mkdir(shardDir, 0755)
 		checkErr(err)
 	}
 
@@ -179,27 +178,27 @@ func DoEncode(fname string) ([]string, int) {
 	return paths, sizePerShard
 }
 
-func main() {
-	flag.Parse()
-	args := flag.Args()
-	if len(args) != 1 {
-		fmt.Fprintf(os.Stderr, "Error: No input filename given\n")
-		flag.Usage()
-		os.Exit(1)
-	}
+// func main() {
+// 	flag.Parse()
+// 	args := flag.Args()
+// 	if len(args) != 1 {
+// 		fmt.Fprintf(os.Stderr, "Error: No input filename given\n")
+// 		flag.Usage()
+// 		os.Exit(1)
+// 	}
 
-	fname := args[0]
-	paths, fileSize := DoEncode(fname)
-	fmt.Println("file size is", fileSize)
+// 	fname := args[0]
+// 	paths, fileSize := DoEncode(fname)
+// 	fmt.Println("file size is", fileSize)
 
-	filepathshard, _ := GetShardDir()
-	fmt.Println("shard is at ", filepathshard)
+// 	filepathshard, _ := GetShardDir()
+// 	fmt.Println("shard is at ", filepathshard)
 
-	fmt.Println("===== 결과 ======")
-	for i, path := range paths {
-		fmt.Println(i, ": ", path)
-	}
-}
+// 	fmt.Println("===== 결과 ======")
+// 	for i, path := range paths {
+// 		fmt.Println(i, ": ", path)
+// 	}
+// }
 
 func checkErr(err error) {
 	if err != nil {
