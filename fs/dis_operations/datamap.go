@@ -31,7 +31,7 @@ func GetDistributedInfo(filePath string, remote Remote) (DistributedFile, error)
 }
 
 // MakeDataMap makes file info json
-func MakeDataMap(originalFilePath string, distributedFile []DistributedFile) error {
+func MakeDataMap(originalFilePath string, distributedFile []DistributedFile, paddingAmount int64) error {
 	if originalFilePath == "" {
 		return errors.New("originalFilePath cannot be empty")
 	}
@@ -60,6 +60,7 @@ func MakeDataMap(originalFilePath string, distributedFile []DistributedFile) err
 		FileName:             originalFileName,
 		FileSize:             originalFileSize,
 		Checksum:             checksum,
+		Padding:              paddingAmount,
 		DistributedFileInfos: distributedFile,
 	}
 

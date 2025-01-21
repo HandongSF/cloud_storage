@@ -59,7 +59,7 @@ func TestMakeDataMap(t *testing.T) {
 		},
 	}
 
-	err = MakeDataMap(tempFile.Name(), distributedFiles)
+	err = MakeDataMap(tempFile.Name(), distributedFiles, 0)
 	if err != nil {
 		t.Errorf("Expected no error, but got: %v", err)
 	}

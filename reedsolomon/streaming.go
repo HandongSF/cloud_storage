@@ -181,7 +181,7 @@ func trimPadding(f *os.File, trimSize int64) {
 	// Get the current size of the file
 	stat, err := f.Stat()
 	checkErr(err)
-
+	fmt.Printf("trimSize : %d\n", trimSize)
 	// Check if file size is larger than expected size
 	if stat.Size() > trimSize {
 		// If the file is larger, we should trim the excess bytes
@@ -288,14 +288,12 @@ func DoDecode(fname string, outfn string, padding int64) {
 	// We don't know the exact filesize.
 	err = enc.Join(f, shards, int64(*dataShards)*size)
 	checkErr(err)
-
-	originFile, err := app.Decrypt(outfn, v2.Passphrase(password))
-	fmt.Println("====  origin file Location ", originFile)
-	checkErr(err)
-
 	if padding > 0 {
 		trimPadding(f, padding)
 	}
+	originFile, err := app.Decrypt(outfn, v2.Passphrase(password))
+	fmt.Println("====  origin file Location ", originFile)
+	checkErr(err)
 
 }
 
