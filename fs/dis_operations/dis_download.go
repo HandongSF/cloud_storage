@@ -59,31 +59,37 @@ func Dis_Download(args []string) (err error) {
 	// Send to erasure coding to recover
 	modFileName := fmt.Sprintf("%s", args[0])
 
+	absolutePath, err := getAbsolutePath(args[1])
+	if err != nil {
+		return err
+	}
+
 	// Move downloaded file to destination
-	outputPath := reedsolomon.DoDecode(modFileName)
+	reedsolomon.DoDecode(modFileName, absolutePath)
 
-	// Get Destination Absolute Path
-	var destinationPath string
-	if filepath.IsAbs(args[1]) {
-		destinationPath = filepath.Join(args[1], filepath.Base(outputPath))
-	} else {
-		// If it's not absolute, resolve relative to the current working directory
-		cwd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("failed to get current working directory: %v", err)
-		}
-		destinationPath = filepath.Join(cwd, args[1], filepath.Base(outputPath))
-	}
-
-	// Move the decoded file to the destination
-	if err := moveFile(outputPath, destinationPath); err != nil {
-		return fmt.Errorf("failed to move file from %s to %s: %v", outputPath, destinationPath, err)
-	}
-
-	fmt.Printf("File successfully moved to %s\n", destinationPath)
+	fmt.Printf("File successfully downloaded to %s\n", absolutePath)
 
 	return nil
 }
+
+func getAbsolutePath(arg string) (string, error) {
+	// Check if the path is absolute
+	if filepath.IsAbs(arg) {
+		// Return the cleaned absolute path
+		return filepath.Clean(arg), nil
+	}
+
+	// If it's not absolute, resolve relative to the current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current working directory: %v", err)
+	}
+
+	// Join and clean the path to get the absolute version
+	destinationPath := filepath.Join(cwd, arg)
+	return filepath.Clean(destinationPath), nil
+}
+
 func moveFile(source, destination string) error {
 	if err := os.Rename(source, destination); err != nil {
 		return fmt.Errorf("failed to move file from %s to %s: %v", source, destination, err)
