@@ -88,9 +88,8 @@ func DoEncode(fname string) ([]string, int, int64) {
 		checkErr(err)
 	}
 
-	// encFile, err := app.Encrypt(fname, v2.Passphrase(password))
-	// checkErr(err)
-	encFile := fname
+	encFile, err := app.Encrypt(fname, v2.Passphrase(password))
+	checkErr(err)
 
 	if (*dataShards + *parShards) > 256 {
 		fmt.Fprintf(os.Stderr, "Error: sum of data and parity shards cannot exceed 256\n")
@@ -282,6 +281,9 @@ func DoDecode(fname string, outfn string) {
 	err = enc.Join(f, shards, int64(*dataShards)*size)
 	checkErr(err)
 
+	originFile, err := app.Decrypt(outfn, v2.Passphrase(password))
+	fmt.Println("====  origin file Location ", originFile)
+	checkErr(err)
 }
 
 func openInput(dataShards, parShards int, fname string) (r []io.Reader, size int64, err error) {
