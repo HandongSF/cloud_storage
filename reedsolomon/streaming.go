@@ -167,7 +167,7 @@ func DoEncode(fname string) ([]string, int, int64) {
 	return paths, sizePerShard, padding
 }
 
-func trimPadding(f *os.File, expectedSize, trimSize int64) {
+func trimPadding(f *os.File, trimSize int64) {
 	// Move the file pointer to the position where data should end
 	_, err := f.Seek(0, io.SeekEnd)
 	checkErr(err)
@@ -177,7 +177,7 @@ func trimPadding(f *os.File, expectedSize, trimSize int64) {
 	checkErr(err)
 
 	// Check if file size is larger than expected size
-	if stat.Size() > expectedSize {
+	if stat.Size() > trimSize {
 		// If the file is larger, we should trim the excess bytes
 		// But we will first check the last 'trimSize' bytes and remove nulls
 		buf := make([]byte, trimSize)          // Use trimSize dynamically
@@ -204,14 +204,14 @@ func trimPadding(f *os.File, expectedSize, trimSize int64) {
 			fmt.Printf("Trimmed %d null bytes from the end of the file\n", trimSize)
 		} else {
 			// If we don't find enough null bytes, just trim excess bytes
-			err := f.Truncate(expectedSize)
+			err := f.Truncate(trimSize)
 			checkErr(err)
-			fmt.Printf("Trimmed excess bytes, keeping only %d bytes\n", expectedSize)
+			fmt.Printf("Trimmed excess bytes, keeping only %d bytes\n", trimSize)
 		}
 	}
 }
 
-func DoDecode(fname string, outfn string) {
+func DoDecode(fname string, outfn string, padding int64) {
 
 	// Create Dir to save Decoded file
 	if _, err := os.Stat(outfn); os.IsNotExist(err) {
@@ -284,13 +284,19 @@ func DoDecode(fname string, outfn string) {
 	originFile, err := app.Decrypt(outfn, v2.Passphrase(password))
 	fmt.Println("====  origin file Location ", originFile)
 	checkErr(err)
+
+	if padding > 0 {
+		trimPadding(f, padding)
+	}
+
 }
 
 func openInput(dataShards, parShards int, fname string) (r []io.Reader, size int64, err error) {
 	// Create shards and load the data.
 	shards := make([]io.Reader, dataShards+parShards)
 	for i := range shards {
-		infn := filepath.Join(shardDir, fmt.Sprintf("%s.%d", fname, i))
+		path, err := os.Getwd()
+		infn := filepath.Join(path, shardDir, fmt.Sprintf("%s.%d", fname, i))
 		fmt.Println("Opening", infn)
 		f, err := os.Open(infn)
 		if err != nil {
