@@ -236,6 +236,9 @@ func DoDecode(fname string, outfn string) {
 	err = enc.Join(f, shards, int64(*dataShards)*size)
 	checkErr(err)
 
+	originFile, err := app.Decrypt(outfn, v2.Passphrase(password))
+	fmt.Println("====  origin file Location ", originFile)
+	checkErr(err)
 }
 
 func openInput(dataShards, parShards int, fname string) (r []io.Reader, size int64, err error) {
