@@ -88,6 +88,7 @@ func DoEncode(fname string) ([]string, int, int64) {
 		checkErr(err)
 	}
 
+	// Encrypt the file
 	encFile, err := app.Encrypt(fname, v2.Passphrase(password))
 	checkErr(err)
 
@@ -164,6 +165,11 @@ func DoEncode(fname string) ([]string, int, int64) {
 	err = enc.Encode(input, parity)
 	checkErr(err)
 	fmt.Printf("File split into %d data + %d parity shards.\n", *dataShards, *parShards)
+
+	// Remove the Encrypted file
+	err = os.Remove(encFile)
+	checkErr(err)
+
 	return paths, sizePerShard, padding
 }
 
@@ -212,6 +218,8 @@ func trimPadding(f *os.File, trimSize int64) {
 }
 
 func DoDecode(fname string, outfn string, padding int64) {
+
+	fname = fmt.Sprintf("%s%s", fname, fileCryptExtension)
 
 	// Create Dir to save Decoded file
 	if _, err := os.Stat(outfn); os.IsNotExist(err) {
