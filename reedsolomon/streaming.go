@@ -82,6 +82,7 @@ func DeleteShardDir() {
 func DoEncode(fname string) ([]string, int) {
 	var paths []string
 
+	// Create Dir to save shards
 	if _, err := os.Stat(shardDir); os.IsNotExist(err) {
 		err := os.Mkdir(shardDir, 0755)
 		checkErr(err)
@@ -168,6 +169,12 @@ func DoEncode(fname string) ([]string, int) {
 
 func DoDecode(fname string, outfn string) {
 
+	// Create Dir to save Decoded file
+	if _, err := os.Stat(outfn); os.IsNotExist(err) {
+		err := os.Mkdir(outfn, 0755)
+		checkErr(err)
+	}
+
 	// Create matrix
 	enc, err := NewStream(*dataShards, *parShards)
 	checkErr(err)
@@ -215,6 +222,7 @@ func DoDecode(fname string, outfn string) {
 		checkErr(err)
 
 	}
+	outfn = filepath.Join(outfn, fname)
 
 	fmt.Println("Writing data to", outfn)
 	f, err := os.Create(outfn)
