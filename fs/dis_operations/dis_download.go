@@ -65,7 +65,12 @@ func Dis_Download(args []string) (err error) {
 	}
 
 	// Move downloaded file to destination
-	reedsolomon.DoDecode(modFileName, absolutePath)
+	fileInfo, err := GetFileInfoStruct(args[0])
+	if err != nil {
+		return err
+	}
+
+	reedsolomon.DoDecode(modFileName, absolutePath, fileInfo.Padding)
 
 	fmt.Printf("File successfully downloaded to %s\n", absolutePath)
 
