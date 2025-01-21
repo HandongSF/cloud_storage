@@ -86,13 +86,16 @@ func Dis_Upload(args []string) (err error) {
 	}
 
 	// Get the full path for the original file
-	originalFileFullPath, err := GetFullPath(args[0])
+	originalFileFullPath, err := getAbsolutePath(args[0])
 	if err != nil {
 		return err
 	}
 
 	// Make the data map using the distributed files
-	MakeDataMap(originalFileFullPath, distributedFileArray)
+	err = MakeDataMap(originalFileFullPath, distributedFileArray, padding)
+	if err != nil {
+		return err
+	}
 
 	// Erase Temp Shards
 	reedsolomon.DeleteShardDir()
