@@ -166,7 +166,7 @@ func DoEncode(fname string) ([]string, int) {
 	return paths, sizePerShard
 }
 
-func DoDecode(fname string) string {
+func DoDecode(fname string, outfn string) {
 
 	// Create matrix
 	enc, err := NewStream(*dataShards, *parShards)
@@ -216,12 +216,6 @@ func DoDecode(fname string) string {
 
 	}
 
-	// Join the shards and write them
-	outfn := *outFile
-	if outfn == "" {
-		outfn = fname
-	}
-
 	fmt.Println("Writing data to", outfn)
 	f, err := os.Create(outfn)
 	checkErr(err)
@@ -235,11 +229,6 @@ func DoDecode(fname string) string {
 	err = enc.Join(f, shards, int64(*dataShards)*size)
 	checkErr(err)
 
-	// Getting the absolute path for the output file
-	tmpPath, _ := os.Getwd()
-	filePath := filepath.Join(tmpPath, *outFile, fname)
-
-	return filePath
 }
 
 func openInput(dataShards, parShards int, fname string) (r []io.Reader, size int64, err error) {
