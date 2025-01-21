@@ -9,10 +9,263 @@ package reedsolomon
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sync"
+
+	v2 "github.com/flew-software/filecrypt"
 )
+
+var shardDir = "shard"
+var dataShards = flag.Int("data", 10, "Number of shards to split the data into, must be below 257.")
+var parShards = flag.Int("par", 2, "Number of parity shards")
+var password = "hello"
+
+const fileCryptExtension string = ".fcef"
+
+var outFile = flag.String("out", "", "Alternative output path/file")
+
+var app = v2.App{
+	FileCryptExtension: fileCryptExtension,
+	Overwrite:          true,
+}
+
+func init() {
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s [-flags] filename.ext\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Valid flags:\n")
+		flag.PrintDefaults()
+	}
+}
+func GetShardDir() (string, error) {
+
+	path, err := os.Getwd()
+
+	if err != nil {
+		return "", err
+
+	}
+	filepath := filepath.Join(path, "shard")
+
+	return filepath, nil
+
+}
+func DeleteShardDir() {
+
+	dir, err := GetShardDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting shard directory: %v\n", err)
+		return
+	}
+
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading shard directory: %v\n", err)
+		return
+	}
+
+	for _, file := range files {
+		filePath := filepath.Join(dir, file.Name())
+		if err := os.RemoveAll(filePath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error deleting file %s: %v\n", filePath, err)
+			continue
+		}
+	}
+
+	fmt.Println("Error : Kidding, It's deleted, I love you :)")
+}
+
+func DoEncode(fname string) ([]string, int) {
+	var paths []string
+
+	if _, err := os.Stat(shardDir); os.IsNotExist(err) {
+		err := os.Mkdir(shardDir, 0755)
+		checkErr(err)
+	}
+
+	// encFile, err := app.Encrypt(fname, v2.Passphrase(password))
+	// checkErr(err)
+	encFile := fname
+
+	if (*dataShards + *parShards) > 256 {
+		fmt.Fprintf(os.Stderr, "Error: sum of data and parity shards cannot exceed 256\n")
+		os.Exit(1)
+	}
+
+	// Create encoding matrix.
+	enc, err := NewStream(*dataShards, *parShards)
+	checkErr(err)
+
+	fmt.Println("Opening", encFile)
+	f, err := os.Open(encFile)
+	checkErr(err)
+
+	instat, err := f.Stat()
+	checkErr(err)
+
+	shards := *dataShards + *parShards
+	out := make([]*os.File, shards)
+
+	// Create the resulting files.
+	_, file := filepath.Split(encFile)
+
+	for i := range out {
+		outfn := fmt.Sprintf("%s.%d", file, i)
+		fmt.Println("Creating", outfn)
+		out[i], err = os.Create(filepath.Join(shardDir, outfn))
+		paths = append(paths, out[i].Name())
+
+		checkErr(err)
+	}
+
+	// Split into files.
+	data := make([]io.Writer, *dataShards)
+	for i := range data {
+		data[i] = out[i]
+	}
+	// Do the split
+	err = enc.Split(f, data, instat.Size())
+	checkErr(err)
+
+	// Close and re-open the files.
+	input := make([]io.Reader, *dataShards)
+
+	for i := range data {
+		out[i].Close()
+		f, err := os.Open(out[i].Name())
+		checkErr(err)
+		input[i] = f
+
+		defer f.Close()
+	}
+
+	// Create parity output writers
+	parity := make([]io.Writer, *parShards)
+	for i := range parity {
+		parity[i] = out[*dataShards+i]
+		defer out[*dataShards+i].Close()
+	}
+
+	// Calculate the size Per Shard
+	fileShard, err := os.Open(paths[1])
+	checkErr(err)
+
+	fInfo, err := fileShard.Stat()
+	checkErr(err)
+
+	sizePerShard := int(fInfo.Size())
+
+	// Encode parity
+	err = enc.Encode(input, parity)
+	checkErr(err)
+	fmt.Printf("File split into %d data + %d parity shards.\n", *dataShards, *parShards)
+	return paths, sizePerShard
+}
+
+func DoDecode(fname string) string {
+
+	// Create matrix
+	enc, err := NewStream(*dataShards, *parShards)
+	checkErr(err)
+
+	// Open the inputs
+	shards, size, err := openInput(*dataShards, *parShards, fname)
+	checkErr(err)
+
+	// Verify the shards
+	ok, err := enc.Verify(shards)
+	if ok {
+		fmt.Println("No reconstruction needed")
+	} else {
+		fmt.Println("Verification failed. Reconstructing data")
+		shards, size, err = openInput(*dataShards, *parShards, fname)
+		checkErr(err)
+		// Create out destination writers
+		out := make([]io.Writer, len(shards))
+		for i := range out {
+			if shards[i] == nil {
+				outfn := filepath.Join(shardDir, fmt.Sprintf("%s.%d", fname, i))
+				fmt.Println("Creating", outfn)
+				out[i], err = os.Create(outfn)
+				checkErr(err)
+			}
+		}
+		err = enc.Reconstruct(shards, out)
+		if err != nil {
+			fmt.Println("Reconstruct failed -", err)
+			os.Exit(1)
+		}
+		// Close output.
+		for i := range out {
+			if out[i] != nil {
+				err := out[i].(*os.File).Close()
+				checkErr(err)
+			}
+		}
+		shards, size, err = openInput(*dataShards, *parShards, fname)
+		ok, err = enc.Verify(shards)
+		if !ok {
+			fmt.Println("Verification failed after reconstruction, data likely corrupted:", err)
+			os.Exit(1)
+		}
+		checkErr(err)
+
+	}
+
+	// Join the shards and write them
+	outfn := *outFile
+	if outfn == "" {
+		outfn = fname
+	}
+
+	fmt.Println("Writing data to", outfn)
+	f, err := os.Create(outfn)
+	checkErr(err)
+
+	defer f.Close()
+
+	shards, size, err = openInput(*dataShards, *parShards, fname)
+	checkErr(err)
+
+	// We don't know the exact filesize.
+	err = enc.Join(f, shards, int64(*dataShards)*size)
+	checkErr(err)
+
+	// Getting the absolute path for the output file
+	tmpPath, _ := os.Getwd()
+	filePath := filepath.Join(tmpPath, *outFile, fname)
+
+	return filePath
+}
+
+func openInput(dataShards, parShards int, fname string) (r []io.Reader, size int64, err error) {
+	// Create shards and load the data.
+	shards := make([]io.Reader, dataShards+parShards)
+	for i := range shards {
+		infn := filepath.Join(shardDir, fmt.Sprintf("%s.%d", fname, i))
+		fmt.Println("Opening", infn)
+		f, err := os.Open(infn)
+		if err != nil {
+			fmt.Println("Error reading file", err)
+			shards[i] = nil
+			continue
+		} else {
+			shards[i] = f
+		}
+		stat, err := f.Stat()
+		checkErr(err)
+		if stat.Size() > 0 {
+			size = stat.Size()
+		} else {
+			shards[i] = nil
+		}
+	}
+	return shards, size, nil
+}
 
 // StreamEncoder is an interface to encode Reed-Salomon parity sets for your data.
 // It provides a fully streaming interface, and processes data in blocks of up to 4MB.
@@ -611,4 +864,10 @@ func (t zeroPaddingReader) Read(p []byte) (n int, err error) {
 		p[i] = '\t'
 	}
 	return n, nil
+}
+func checkErr(err error) {
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s", err.Error())
+		os.Exit(2)
+	}
 }
