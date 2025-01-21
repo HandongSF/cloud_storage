@@ -19,11 +19,6 @@ func Dis_rm(arg []string) (err error) {
 	}
 	fmt.Printf("number of files: %d\n", len(listOfFiles))
 
-	// print list of files (for debug)
-	for _, name := range listOfFiles {
-		fmt.Printf("check: " + name + "\n")
-	}
-
 	for _, name := range listOfFiles {
 		fmt.Printf("name: " + name + " " + arg[0] + "\n")
 		if name == arg[0] {
@@ -79,20 +74,6 @@ func Dis_rm(arg []string) (err error) {
 func remoteCallDeleteFile(args []string) (err error) {
 	fmt.Printf("Calling remoteCallDeleteFile with args: %v\n", args)
 
-	// 파일 존재 여부를 먼저 확인
-	// f, fileName := cmd.NewFsFile(args[0])
-	// if fileName == "" {
-	// 	fmt.Printf("Skipping deletion: %s is a directory or doesn't exist.\n", args[0])
-	// 	return nil
-	// }
-
-	// _, err = f.NewObject(context.Background(), fileName)
-	// if err != nil {
-	// 	fmt.Printf("Skipping deletion: file %s does not exist on remote.\n", args[0])
-	// 	return nil
-	// }
-
-	// 파일이 존재하면 삭제 명령 실행
 	deleteFileCommand := *deleteFileDefinition
 	deleteFileCommand.SetArgs(args)
 
