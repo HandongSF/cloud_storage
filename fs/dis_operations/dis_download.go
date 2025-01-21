@@ -90,13 +90,6 @@ func getAbsolutePath(arg string) (string, error) {
 	return filepath.Clean(destinationPath), nil
 }
 
-func moveFile(source, destination string) error {
-	if err := os.Rename(source, destination); err != nil {
-		return fmt.Errorf("failed to move file from %s to %s: %v", source, destination, err)
-	}
-	return nil
-}
-
 func contains(slice []string, str string) bool {
 	for _, v := range slice {
 		if v == str {
