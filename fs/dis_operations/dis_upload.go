@@ -19,12 +19,12 @@ import (
 
 func Dis_Upload(args []string) (err error) {
 	// Check if file exists
-	err = dis_init(args[0])
+	absolutePath, err := dis_init(args[0])
 	if err != nil {
 		return err
 	}
 
-	dis_names, shardSize := reedsolomon.DoEncode(args[0])
+	dis_names, shardSize := reedsolomon.DoEncode(absolutePath)
 	remotes := config.GetRemotes()
 	distributedFileArray := make([]DistributedFile, len(dis_names))
 	rr_counter := 0 // Round Robin
@@ -209,34 +209,26 @@ func GetFullPath(source string) (string, error) {
 	return fullPath, nil
 }
 
-func dis_init(arg string) (err error) {
-	path, err := os.Getwd()
+func dis_init(arg string) (string, error) {
+	// Use the existing getAbsolutePath function to resolve the absolute path
+	absolutePath, err := getAbsolutePath(arg)
 	if err != nil {
-		fmt.Println("error to get current directory path: ", err)
-		return err
+		fmt.Println("Error resolving the absolute path:", err)
+		return "", err
 	}
 
-	fullPath := filepath.Join(path, arg)
-	// 존재하지 않는 파일이라면 cmd창에 에러 메세지 출력
-	fi, err := os.Open(fullPath)
-	if err != nil {
-		fmt.Println("file does not exit", err)
-		return err
+	// Check if the file exists
+	if _, err := os.Stat(absolutePath); err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("File does not exist:", absolutePath)
+			return "", fmt.Errorf("file does not exist: %s", absolutePath)
+		}
+		// Handle other errors (e.g., permission issues)
+		fmt.Println("Error checking file:", err)
+		return "", err
 	}
-	// 존재한다면 ok 메세지 cmd창에 출력
-	fmt.Println("Success to find file : ", fi)
 
-	// 해당 코드 필요 없을 수 있음. Reedsolomon에서 생성하는 shard file에 shard 생성
-	// 유저가 현재 위치한 로컬 디렉토리에(path) 파일이름으로 디렉토리 생성
-	//fileBase := strings.TrimSuffix(arg, filepath.Ext(arg))
-	//dirPath := filepath.Join(path, fileBase+"_dir")
-
-	//err = os.Mkdir(dirPath, 0755)
-	//if err != nil {
-	//	fmt.Println("Error creating directory: ", err)
-	//	return err
-	//}
-	//fmt.Println("Directory created successfully at: ", dirPath)
-
-	return nil
+	// If the file exists, print success message
+	fmt.Println("Success: File found at", absolutePath)
+	return absolutePath, nil
 }
