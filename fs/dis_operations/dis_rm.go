@@ -70,9 +70,11 @@ func Dis_rm(arg []string) (err error) {
 
 			fmt.Printf("Successfully deleted all parts of %s and updated metadata.\n", arg[0])
 
-			break
+			return nil
 		}
 	}
+
+	return fmt.Errorf("file %s does not exist on remote.\n", arg[0])
 
 	return nil
 
