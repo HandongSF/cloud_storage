@@ -24,7 +24,8 @@ func Dis_Upload(args []string) (err error) {
 		return err
 	}
 
-	dis_names, shardSize := reedsolomon.DoEncode(absolutePath)
+	dis_names, shardSize, padding := reedsolomon.DoEncode(absolutePath)
+	fmt.Printf("%d\n", padding)
 	remotes := config.GetRemotes()
 	distributedFileArray := make([]DistributedFile, len(dis_names))
 	rr_counter := 0 // Round Robin

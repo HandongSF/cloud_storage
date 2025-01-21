@@ -79,9 +79,9 @@ func DeleteShardDir() {
 	fmt.Println("Error : Kidding, It's deleted, I love you :)")
 }
 
-func DoEncode(fname string) ([]string, int) {
+func DoEncode(fname string) ([]string, int, int64) {
 	var paths []string
-
+	var padding int64
 	// Create Dir to save shards
 	if _, err := os.Stat(shardDir); os.IsNotExist(err) {
 		err := os.Mkdir(shardDir, 0755)
@@ -129,7 +129,8 @@ func DoEncode(fname string) ([]string, int) {
 		data[i] = out[i]
 	}
 	// Do the split
-	err = enc.Split(f, data, instat.Size())
+	padding, err = enc.Split(f, data, instat.Size())
+	fmt.Printf("Padding : %d\n", padding)
 	checkErr(err)
 
 	// Close and re-open the files.
@@ -164,7 +165,51 @@ func DoEncode(fname string) ([]string, int) {
 	err = enc.Encode(input, parity)
 	checkErr(err)
 	fmt.Printf("File split into %d data + %d parity shards.\n", *dataShards, *parShards)
-	return paths, sizePerShard
+	return paths, sizePerShard, padding
+}
+
+func trimPadding(f *os.File, expectedSize, trimSize int64) {
+	// Move the file pointer to the position where data should end
+	_, err := f.Seek(0, io.SeekEnd)
+	checkErr(err)
+
+	// Get the current size of the file
+	stat, err := f.Stat()
+	checkErr(err)
+
+	// Check if file size is larger than expected size
+	if stat.Size() > expectedSize {
+		// If the file is larger, we should trim the excess bytes
+		// But we will first check the last 'trimSize' bytes and remove nulls
+		buf := make([]byte, trimSize)          // Use trimSize dynamically
+		_, err = f.Seek(-trimSize, io.SeekEnd) // Move the file pointer 'trimSize' bytes back
+		checkErr(err)
+
+		n, err := f.Read(buf)
+		checkErr(err)
+
+		// Count how many null bytes are at the end of the file
+		var nullByteCount int64 // Change to int64
+		for _, b := range buf[:n] {
+			if b == 0x00 {
+				nullByteCount++
+			} else {
+				break
+			}
+		}
+
+		// If we found enough null bytes, we should trim them
+		if nullByteCount == trimSize {
+			err := f.Truncate(stat.Size() - trimSize)
+			checkErr(err)
+			fmt.Printf("Trimmed %d null bytes from the end of the file\n", trimSize)
+		} else {
+			// If we don't find enough null bytes, just trim excess bytes
+			err := f.Truncate(expectedSize)
+			checkErr(err)
+			fmt.Printf("Trimmed excess bytes, keeping only %d bytes\n", expectedSize)
+		}
+	}
 }
 
 func DoDecode(fname string, outfn string) {
@@ -328,7 +373,7 @@ type StreamEncoder interface {
 	// You must supply the total size of your input.
 	// 'ErrShortData' will be returned if it is unable to retrieve the
 	// number of bytes indicated.
-	Split(data io.Reader, dst []io.Writer, size int64) (err error)
+	Split(data io.Reader, dst []io.Writer, size int64) (int64, error)
 
 	// Join the shards and write the data segment to dst.
 	//
@@ -816,52 +861,59 @@ func (r *rsStream) Join(dst io.Writer, shards []io.Reader, outSize int64) error 
 // You must supply the total size of your input.
 // 'ErrShortData' will be returned if it is unable to retrieve the
 // number of bytes indicated.
-func (r *rsStream) Split(data io.Reader, dst []io.Writer, size int64) error {
+func (r *rsStream) Split(data io.Reader, dst []io.Writer, size int64) (int64, error) {
 	if size == 0 {
-		return ErrShortData
+		return 0, ErrShortData
 	}
 	if len(dst) != r.r.dataShards {
-		return ErrInvShardNum
+		return 0, ErrInvShardNum
 	}
 
 	for i := range dst {
 		if dst[i] == nil {
-			return StreamWriteError{Err: ErrShardNoData, Stream: i}
+			return 0, StreamWriteError{Err: ErrShardNoData, Stream: i}
 		}
 	}
 
 	// Calculate number of bytes per shard.
 	perShard := (size + int64(r.r.dataShards) - 1) / int64(r.r.dataShards)
 
-	// Pad data to r.Shards*perShard.
+	// Calculate padding size.
 	paddingSize := (int64(r.r.totalShards) * perShard) - size
-	data = io.MultiReader(data, io.LimitReader(zeroPaddingReader{}, paddingSize))
+
+	// Create zeroPaddingReader to track padding bytes.
+	paddingReader := &zeroPaddingReader{}
+	data = io.MultiReader(data, io.LimitReader(paddingReader, paddingSize))
 
 	// Split into equal-length shards and copy.
 	for i := range dst {
 		n, err := io.CopyN(dst[i], data, perShard)
 		if err != io.EOF && err != nil {
-			return err
+			return paddingReader.totalBytes, err
 		}
 		if n != perShard {
-			return ErrShortData
+			return paddingReader.totalBytes, ErrShortData
 		}
 	}
 
-	return nil
+	return paddingReader.totalBytes, nil
 }
 
-type zeroPaddingReader struct{}
+type zeroPaddingReader struct {
+	totalBytes int64
+}
 
 var _ io.Reader = &zeroPaddingReader{}
 
-func (t zeroPaddingReader) Read(p []byte) (n int, err error) {
+func (t *zeroPaddingReader) Read(p []byte) (n int, err error) {
 	n = len(p)
 	for i := 0; i < n; i++ {
-		p[i] = '\t'
+		p[i] = 0
 	}
+	t.totalBytes += int64(n)
 	return n, nil
 }
+
 func checkErr(err error) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s", err.Error())
