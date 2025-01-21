@@ -1,12 +1,16 @@
 package dis_operations
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 
+	"github.com/rclone/rclone/cmd"
+	"github.com/rclone/rclone/fs/operations"
 	"github.com/rclone/rclone/reedsolomon"
+	"github.com/spf13/cobra"
 )
 
 func Dis_Download(args []string) (err error) {
@@ -42,7 +46,7 @@ func Dis_Download(args []string) (err error) {
 		wg.Add(1)
 		go func(source, shardDir string) {
 			defer wg.Done()
-			if err := remoteCallCopy([]string{source, shardDir}); err != nil {
+			if err := remoteCallCopyforDown([]string{source, shardDir}); err != nil {
 				mu.Lock()
 				errs = append(errs, fmt.Errorf("error in remoteCallCopy for file %s: %v", source, err))
 				mu.Unlock()
@@ -97,4 +101,37 @@ func contains(slice []string, str string) bool {
 		}
 	}
 	return false
+}
+
+func remoteCallCopyforDown(args []string) (err error) {
+	fmt.Printf("Calling remoteCallCopy with args: %v\n", args)
+
+	// Fetch the copy command
+	copyCommand := *copyCommandDefinitionForDown
+	copyCommand.SetArgs(args)
+
+	err = copyCommand.Execute()
+	if err != nil {
+		return fmt.Errorf("error executing copyCommand: %w", err)
+	}
+
+	return nil
+}
+
+var copyCommandDefinitionForDown = &cobra.Command{
+	Use: "copy source:path dest:path",
+	Annotations: map[string]string{
+		"groups": "Copy,Filter,Listing,Important",
+	},
+	Run: func(command *cobra.Command, args []string) {
+		cmd.CheckArgs(2, 2, command, args)
+		fsrc, srcFileName, fdst := cmd.NewFsSrcFileDst(args)
+		cmd.RunWithSustainOS(true, true, command, func() error {
+			if srcFileName == "" {
+				fmt.Printf("%s is a directory or doesn't exist\n", args[0])
+				return nil
+			}
+			return operations.CopyFile(context.Background(), fdst, fsrc, srcFileName, srcFileName)
+		}, true)
+	},
 }
