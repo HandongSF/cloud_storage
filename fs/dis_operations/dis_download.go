@@ -66,9 +66,6 @@ func Dis_Download(args []string) (err error) {
 		return fmt.Errorf("errors occurred during download: %v", errs)
 	}
 
-	// Send to erasure coding to recover
-	modFileName := fmt.Sprintf("%s", args[0])
-
 	absolutePath, err := getAbsolutePath(args[1])
 	if err != nil {
 		return err
@@ -80,7 +77,7 @@ func Dis_Download(args []string) (err error) {
 		return err
 	}
 
-	reedsolomon.DoDecode(modFileName, absolutePath, fileInfo.Padding)
+	reedsolomon.DoDecode(args[0], absolutePath, fileInfo.Padding)
 
 	//check checksum
 	//if checksum error -> delete file
@@ -99,7 +96,7 @@ func Dis_Download(args []string) (err error) {
 			fmt.Printf("Failed to delete file: %v\n", err)
 			return
 		}
-		return fmt.Errorf("checksum is different! so can't download file\n")
+		return fmt.Errorf("checksum is different! so can't download file")
 	}
 
 	reedsolomon.DeleteShardDir()
