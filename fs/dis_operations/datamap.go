@@ -13,11 +13,10 @@ import (
 
 func GetDistributedInfo(filePath string, remote Remote) (DistributedFile, error) {
 	if filePath == "" {
-		return DistributedFile{}, errors.New("FileName cannot be empty")
+		return DistributedFile{}, errors.New("filePath cannot be empty")
 	}
 
 	fileInfo, err := os.Stat(filePath)
-
 	if err != nil {
 		return DistributedFile{}, fmt.Errorf("failed to stat file %s: %v", filePath, err)
 	}
@@ -27,29 +26,23 @@ func GetDistributedInfo(filePath string, remote Remote) (DistributedFile, error)
 		DisFileSize:     fileInfo.Size(),
 		Remote:          remote,
 	}, nil
-
 }
 
-// MakeDataMap makes file info json
-func MakeDataMap(originalFilePath string, distributedFile []DistributedFile, paddingAmount int64) error {
+func MakeDataMap(originalFilePath string, distributedFiles []DistributedFile, paddingAmount int64) error {
 	if originalFilePath == "" {
 		return errors.New("originalFilePath cannot be empty")
 	}
 
-	jsonFilePath, err := os.Getwd()
+	jsonFilePath, err := getJsonFilePath()
 	if err != nil {
-		return fmt.Errorf("failed to find Path: %v", err)
+		return err
 	}
-	jsonFilePath = filepath.Join(jsonFilePath, "data", "datamap.json")
-	fmt.Println("Updated Path:", jsonFilePath)
 
 	originalFileName := filepath.Base(originalFilePath)
-
 	originalFileInfo, err := os.Stat(originalFilePath)
 	if err != nil {
 		return fmt.Errorf("failed to stat original file: %v", err)
 	}
-	originalFileSize := originalFileInfo.Size()
 
 	checksum, err := calculateChecksum(originalFilePath)
 	if err != nil {
@@ -58,58 +51,107 @@ func MakeDataMap(originalFilePath string, distributedFile []DistributedFile, pad
 
 	newFileInfo := FileInfo{
 		FileName:             originalFileName,
-		FileSize:             originalFileSize,
+		FileSize:             originalFileInfo.Size(),
 		Checksum:             checksum,
 		Padding:              paddingAmount,
-		DistributedFileInfos: distributedFile,
+		DistributedFileInfos: distributedFiles,
 	}
 
-	// Read existing JSON data if the file exists
-	var fileInfos []FileInfo
-	if _, err := os.Stat(jsonFilePath); err == nil {
-		file, err := os.Open(jsonFilePath)
-		if err != nil {
-			return fmt.Errorf("failed to open JSON file: %v", err)
-		}
-		defer file.Close()
-
-		err = json.NewDecoder(file).Decode(&fileInfos)
-		if err != nil && !errors.Is(err, io.EOF) {
-			return fmt.Errorf("failed to decode existing JSON: %v", err)
-		}
-	}
-
-	// Remove existing file info with the same name
-	updatedFileInfos := []FileInfo{}
-	for _, fileInfo := range fileInfos {
-		if fileInfo.FileName != originalFileName {
-			updatedFileInfos = append(updatedFileInfos, fileInfo)
-		}
-	}
-
-	// Append the new file info to the array
-	updatedFileInfos = append(updatedFileInfos, newFileInfo)
-
-	// Marshal the updated array back to JSON
-	dataMap, err := json.MarshalIndent(updatedFileInfos, "", "  ")
+	existingFiles, err := readJsonFile(jsonFilePath)
 	if err != nil {
-		return fmt.Errorf("failed to marshal JSON: %v", err)
+		return err
 	}
 
-	// Write JSON data to the file (overwrite)
-	err = os.MkdirAll(filepath.Dir(jsonFilePath), os.ModePerm)
-	if err != nil {
-		return fmt.Errorf("failed to create directory: %v", err)
-	}
-	err = os.WriteFile(jsonFilePath, dataMap, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to write JSON file: %v", err)
-	}
+	updatedFiles := removeFileByName(existingFiles, originalFileName)
+	updatedFiles = append(updatedFiles, newFileInfo)
 
-	return nil
+	return writeJsonFile(jsonFilePath, updatedFiles)
 }
 
-// calculateChecksum computes the SHA256 checksum of a file's contents.
+func RemoveFileFromMetadata(fileName string) error {
+	jsonFilePath, err := getJsonFilePath()
+	if err != nil {
+		return err
+	}
+
+	existingFiles, err := readJsonFile(jsonFilePath)
+	if err != nil {
+		return err
+	}
+
+	updatedFiles := removeFileByName(existingFiles, fileName)
+
+	return writeJsonFile(jsonFilePath, updatedFiles)
+}
+
+func GetFileInfoStruct(fileName string) (FileInfo, error) {
+	jsonFilePath, err := getJsonFilePath()
+	if err != nil {
+		return FileInfo{}, err
+	}
+
+	files, err := readJsonFile(jsonFilePath)
+	if err != nil {
+		return FileInfo{}, err
+	}
+
+	for _, file := range files {
+		if file.FileName == fileName {
+			return file, nil
+		}
+	}
+
+	return FileInfo{}, fmt.Errorf("file name '%s' not found", fileName)
+}
+
+func DoesFileStructExist(fileName string) (bool, error) {
+	jsonFilePath, err := getJsonFilePath()
+	if err != nil {
+		return false, err
+	}
+
+	files, err := readJsonFile(jsonFilePath)
+	if err != nil {
+		return false, err
+	}
+
+	for _, file := range files {
+		if file.FileName == fileName {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func GetDistributedFileStruct(fileName string) ([]DistributedFile, error) {
+	jsonFilePath, err := getJsonFilePath()
+	if err != nil {
+		return nil, err
+	}
+
+	files, err := readJsonFile(jsonFilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, file := range files {
+		if file.FileName == fileName {
+			return file.DistributedFileInfos, nil
+		}
+	}
+
+	return nil, fmt.Errorf("file name '%s' not found", fileName)
+}
+
+func GetChecksum(fileName string) string {
+	fileInfo, err := GetFileInfoStruct(fileName)
+	if err != nil {
+		return ""
+	}
+	return fileInfo.Checksum
+}
+
 func calculateChecksum(filePath string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -124,121 +166,53 @@ func calculateChecksum(filePath string) (string, error) {
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-func RemoveFileFromMetadata(fileName string) error {
-	jsonFilePath, err := os.Getwd()
+func getJsonFilePath() (string, error) {
+	cwd, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("failed to find Path: %v", err)
+		return "", fmt.Errorf("failed to get current working directory: %v", err)
 	}
-	jsonFilePath = filepath.Join(jsonFilePath, "data", "datamap.json")
-	fmt.Println("Updated Path:", jsonFilePath)
-
-	file, err := os.Open(jsonFilePath)
-	if err != nil {
-		return fmt.Errorf("failed to open metadata file: %v", err)
-	}
-	defer file.Close()
-
-	byteValue, err := os.ReadFile(jsonFilePath)
-	if err != nil {
-		return fmt.Errorf("failed to read metadata file: %v", err)
-	}
-
-	var metadata []FileInfo
-	if err := json.Unmarshal(byteValue, &metadata); err != nil {
-		return fmt.Errorf("failed to unmarshal metadata: %v", err)
-	}
-
-	newMetadata := []FileInfo{}
-	for _, fileInfo := range metadata {
-		if fileInfo.FileName != fileName {
-			newMetadata = append(newMetadata, fileInfo)
-		}
-	}
-
-	newByteValue, err := json.MarshalIndent(newMetadata, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal new metadata: %v", err)
-	}
-
-	// JSON 파일에 쓰기
-	if err := os.WriteFile(jsonFilePath, newByteValue, 0644); err != nil {
-		return fmt.Errorf("failed to write updated metadata file: %v", err)
-	}
-
-	return nil
-
+	return filepath.Join(cwd, "data", "datamap.json"), nil
 }
 
-func GetFileInfoStruct(file_Name string) (FileInfo, error) {
-	FilePath := ""
-	FilePath, err := os.Getwd()
+func readJsonFile(filePath string) ([]FileInfo, error) {
+	file, err := os.Open(filePath)
 	if err != nil {
-		return FileInfo{}, fmt.Errorf("failed to find Path: %v", err)
-	}
-	FilePath = filepath.Join(FilePath, "data", "datamap.json")
-	// 파일 열기
-	file, err := os.Open(FilePath)
-	if err != nil {
-		return FileInfo{}, fmt.Errorf("failed to open file : %v", err)
-	}
-	defer file.Close()
-
-	// Json file decoding
-	var files []FileInfo
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&files)
-	if err != nil {
-		return FileInfo{}, fmt.Errorf("failed to decode JSON: %v", err)
-	}
-
-	// 주어진 파일 이름으로 검색
-	for _, file := range files {
-		if file.FileName == file_Name {
-			return file, nil
+		if errors.Is(err, os.ErrNotExist) {
+			return []FileInfo{}, nil // Return empty slice if file does not exist
 		}
-	}
-
-	// 파일 이름을 찾지 못한 경우
-	return FileInfo{}, fmt.Errorf("file name '%s' not found", file_Name)
-}
-
-func GetDistributedFileStruct(fileName string) ([]DistributedFile, error) {
-	FilePath := ""
-	FilePath, err := os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("failed to find Path: %v", err)
-	}
-	FilePath = filepath.Join(FilePath, "data", "datamap.json")
-
-	// open json file
-	file, err := os.Open(FilePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open file : %v", err)
+		return nil, fmt.Errorf("failed to open JSON file: %v", err)
 	}
 	defer file.Close()
 
-	// Json file decoding
 	var files []FileInfo
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&files)
-	if err != nil {
+	if err := json.NewDecoder(file).Decode(&files); err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("failed to decode JSON: %v", err)
 	}
-
-	// 주어진 파일 이름으로 검색
-	for _, file := range files {
-		if file.FileName == fileName {
-			return file.DistributedFileInfos, nil
-		}
-	}
-
-	// 파일 이름을 찾지 못한 경우
-	return nil, fmt.Errorf("file name '%s' not found", fileName)
+	return files, nil
 }
 
-func GetChecksum(fileName string) (checksum string) {
-	info, _ := GetFileInfoStruct(fileName)
+func writeJsonFile(filePath string, data []FileInfo) error {
+	if err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm); err != nil {
+		return fmt.Errorf("failed to create directory: %v", err)
+	}
 
-	return info.Checksum
+	jsonData, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal JSON: %v", err)
+	}
 
+	if err := os.WriteFile(filePath, jsonData, 0644); err != nil {
+		return fmt.Errorf("failed to write JSON file: %v", err)
+	}
+	return nil
+}
+
+func removeFileByName(files []FileInfo, fileName string) []FileInfo {
+	updatedFiles := []FileInfo{}
+	for _, file := range files {
+		if file.FileName != fileName {
+			updatedFiles = append(updatedFiles, file)
+		}
+	}
+	return updatedFiles
 }
