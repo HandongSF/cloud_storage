@@ -25,6 +25,17 @@ func Dis_Upload(args []string) (err error) {
 		return err
 	}
 
+	// Try to get File
+	isDuplicate, err := DoesFileStructExist(args[0])
+	if err != nil {
+		return err
+	}
+
+	if isDuplicate {
+		fmt.Printf("Duplicate exists for file: %s", args[0])
+		return nil
+	}
+
 	dis_names, shardSize, padding := reedsolomon.DoEncode(absolutePath)
 	fmt.Printf("%d\n", padding)
 	remotes := config.GetRemotes()
