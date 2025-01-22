@@ -172,7 +172,6 @@ func DoEncode(fname string) ([]string, int, int64) {
 }
 
 func trimPadding(f *os.File, trimSize int64) {
-	// Move the file pointer to the position where data should end
 	_, err := f.Seek(0, io.SeekEnd)
 	checkErr(err)
 
@@ -182,10 +181,8 @@ func trimPadding(f *os.File, trimSize int64) {
 	fmt.Printf("trimSize : %d\n", trimSize)
 	// Check if file size is larger than expected size
 	if stat.Size() > trimSize {
-		// If the file is larger, we should trim the excess bytes
-		// But we will first check the last 'trimSize' bytes and remove nulls
-		buf := make([]byte, trimSize)          // Use trimSize dynamically
-		_, err = f.Seek(-trimSize, io.SeekEnd) // Move the file pointer 'trimSize' bytes back
+		buf := make([]byte, trimSize)
+		_, err = f.Seek(-trimSize, io.SeekEnd)
 		checkErr(err)
 
 		n, err := f.Read(buf)
