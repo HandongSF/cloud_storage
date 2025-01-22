@@ -1995,6 +1995,8 @@ func MoveCaseInsensitive(ctx context.Context, fdst fs.Fs, fsrc fs.Fs, dstFileNam
 
 // moveOrCopyFile moves or copies a single file possibly to a new name
 func moveOrCopyFile(ctx context.Context, fdst fs.Fs, fsrc fs.Fs, dstFileName string, srcFileName string, cp bool) (err error) {
+	start := time.Now()
+
 	ci := fs.GetConfig(ctx)
 	logger, usingLogger := GetLogger(ctx)
 	dstFilePath := path.Join(fdst.Root(), dstFileName)
@@ -2099,6 +2101,10 @@ func moveOrCopyFile(ctx context.Context, fdst fs.Fs, fsrc fs.Fs, dstFileName str
 			logger(ctx, Differ, srcObj, dstObj, nil)
 		}
 	}
+
+	elapsed := time.Since(start)
+	fmt.Printf("Time taken for copy cmd: %s, dstfileName: %s, srcfileName: %s\n", elapsed, dstFileName, srcFileName)
+
 	return err
 }
 
