@@ -6,7 +6,7 @@ import (
 )
 
 func TestGetDistributedFile(t *testing.T) {
-	listOfFile, err := GetDistributedFile()
+	listOfFile, err := Dis_ls()
 	if err == nil {
 		for idx, name := range listOfFile {
 			fmt.Printf("%d : %s\n", idx+1, name)

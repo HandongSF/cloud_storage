@@ -14,7 +14,7 @@ import (
 func Dis_rm(arg []string) (err error) {
 	//일단 list에 존재하는지 확인
 	fmt.Printf(arg[0] + "\n")
-	listOfFiles, err := GetDistributedFile()
+	listOfFiles, err := Dis_ls()
 	if err != nil {
 		return fmt.Errorf("GetDistributedFile failed %v", err)
 	}

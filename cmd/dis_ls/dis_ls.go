@@ -35,7 +35,7 @@ Eg
 		if command.Use == "dis_ls" {
 			cmd.Run(true, true, command, func() error {
 				// command 가 dis_ls라면 GetDistributedFile() 함수 실행
-				fileNames, err := dis_operations.GetDistributedFile()
+				fileNames, err := dis_operations.Dis_ls()
 				if err != nil {
 					return fmt.Errorf("error while retrieving distributed files: %v", err)
 				}

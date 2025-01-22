@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sync"
 	"time"
@@ -15,7 +16,7 @@ import (
 )
 
 func Dis_Download(args []string) (err error) {
-	distributedFileNames, err := GetDistributedFile()
+	distributedFileNames, err := Dis_ls()
 	if err != nil {
 		return err
 	}
@@ -82,8 +83,25 @@ func Dis_Download(args []string) (err error) {
 	reedsolomon.DoDecode(modFileName, absolutePath, fileInfo.Padding)
 	reedsolomon.DeleteShardDir()
 
-	//checksum확인
-	//if checksum error -> file 지우기
+	//check checksum
+	//if checksum error -> delete file
+	filePathAndName := path.Join(absolutePath, args[0])
+	newChecksum, err := calculateChecksum(filePathAndName)
+	if err != nil {
+		return err
+	}
+	if newChecksum == GetChecksum(args[0]) {
+		fmt.Printf("checksum is same\n")
+	} else {
+		fmt.Printf("checksum is different\n")
+		//delete file
+		err = os.Remove(filePathAndName)
+		if err != nil {
+			fmt.Printf("Failed to delete file: %v\n", err)
+			return
+		}
+		return fmt.Errorf("checksum is different! so can't download file\n")
+	}
 
 	fmt.Printf("File successfully downloaded to %s\n", absolutePath)
 
