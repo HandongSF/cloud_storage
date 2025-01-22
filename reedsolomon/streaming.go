@@ -75,8 +75,6 @@ func DeleteShardDir() {
 			continue
 		}
 	}
-
-	fmt.Println("Error : Kidding, It's deleted, I love you :)")
 }
 
 func DoEncode(fname string) ([]string, int, int64) {
