@@ -80,6 +80,10 @@ func Dis_Download(args []string) (err error) {
 	}
 
 	reedsolomon.DoDecode(modFileName, absolutePath, fileInfo.Padding)
+	reedsolomon.DeleteShardDir()
+
+	//checksum확인
+	//if checksum error -> file 지우기
 
 	fmt.Printf("File successfully downloaded to %s\n", absolutePath)
 
