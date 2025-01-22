@@ -295,6 +295,10 @@ func DoDecode(fname string, outfn string, padding int64) {
 	fmt.Println("====  origin file Location ", originFile)
 	checkErr(err)
 
+	// Remove the Decodeded file
+	err = os.Remove(outfn)
+	checkErr(err)
+
 }
 
 func openInput(dataShards, parShards int, fname string) (r []io.Reader, size int64, err error) {
