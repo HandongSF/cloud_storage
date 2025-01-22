@@ -81,7 +81,6 @@ func Dis_Download(args []string) (err error) {
 	}
 
 	reedsolomon.DoDecode(modFileName, absolutePath, fileInfo.Padding)
-	reedsolomon.DeleteShardDir()
 
 	//check checksum
 	//if checksum error -> delete file
@@ -102,6 +101,8 @@ func Dis_Download(args []string) (err error) {
 		}
 		return fmt.Errorf("checksum is different! so can't download file\n")
 	}
+
+	reedsolomon.DeleteShardDir()
 
 	fmt.Printf("File successfully downloaded to %s\n", absolutePath)
 

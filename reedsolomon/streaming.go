@@ -292,7 +292,7 @@ func DoDecode(fname string, outfn string, padding int64) {
 	originFile, err := app.Decrypt(outfn, v2.Passphrase(password))
 	fmt.Println("====  origin file Location ", originFile)
 	checkErr(err)
-
+	f.Close()
 	// Remove the Decodeded file
 	err = os.Remove(outfn)
 	checkErr(err)

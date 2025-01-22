@@ -79,11 +79,19 @@ func MakeDataMap(originalFilePath string, distributedFile []DistributedFile, pad
 		}
 	}
 
+	// Remove existing file info with the same name
+	updatedFileInfos := []FileInfo{}
+	for _, fileInfo := range fileInfos {
+		if fileInfo.FileName != originalFileName {
+			updatedFileInfos = append(updatedFileInfos, fileInfo)
+		}
+	}
+
 	// Append the new file info to the array
-	fileInfos = append(fileInfos, newFileInfo)
+	updatedFileInfos = append(updatedFileInfos, newFileInfo)
 
 	// Marshal the updated array back to JSON
-	dataMap, err := json.MarshalIndent(fileInfos, "", "  ")
+	dataMap, err := json.MarshalIndent(updatedFileInfos, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal JSON: %v", err)
 	}
@@ -99,7 +107,6 @@ func MakeDataMap(originalFilePath string, distributedFile []DistributedFile, pad
 	}
 
 	return nil
-
 }
 
 // calculateChecksum computes the SHA256 checksum of a file's contents.
