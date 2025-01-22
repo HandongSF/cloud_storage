@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/rclone/rclone/cmd"
 	"github.com/rclone/rclone/fs/operations"
@@ -39,6 +40,7 @@ func Dis_Download(args []string) (err error) {
 	var mu sync.Mutex
 	var errs []error
 
+	start := time.Now()
 	for _, disFileStruct := range distributedFileInfos {
 		source := fmt.Sprintf("%s:%s/%s", disFileStruct.Remote.Name, remoteDirectory, disFileStruct.DistributedFile)
 		fmt.Printf("Downloading shard %s to %s of size %d\n", source, shardDir, disFileStruct.DisFileSize)
@@ -55,6 +57,9 @@ func Dis_Download(args []string) (err error) {
 	}
 
 	wg.Wait()
+
+	elapsed := time.Since(start)
+	fmt.Printf("Time taken for dis_download: %s\n", elapsed)
 
 	if len(errs) > 0 {
 		return fmt.Errorf("errors occurred during download: %v", errs)

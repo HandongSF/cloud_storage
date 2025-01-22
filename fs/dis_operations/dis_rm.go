@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/rclone/rclone/cmd"
 	"github.com/rclone/rclone/fs/operations"
@@ -18,6 +19,8 @@ func Dis_rm(arg []string) (err error) {
 		return fmt.Errorf("GetDistributedFile failed %v", err)
 	}
 	fmt.Printf("number of files: %d\n", len(listOfFiles))
+
+	start := time.Now()
 
 	for _, name := range listOfFiles {
 		fmt.Printf("name: " + name + " " + arg[0] + "\n")
@@ -47,6 +50,9 @@ func Dis_rm(arg []string) (err error) {
 
 			wg.Wait()
 			close(errCh)
+
+			elapsed := time.Since(start)
+			fmt.Printf("Time taken for dis_rm: %s\n", elapsed)
 
 			var deleteErrs []error
 			for err := range errCh {

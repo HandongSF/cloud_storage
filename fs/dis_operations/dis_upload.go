@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/rclone/rclone/cmd"
 	"github.com/rclone/rclone/fs"
@@ -37,6 +38,8 @@ func Dis_Upload(args []string) (err error) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	var errs []error
+
+	start := time.Now()
 
 	for i, source := range dis_names {
 		// Prepare destination for the file upload
@@ -80,6 +83,9 @@ func Dis_Upload(args []string) (err error) {
 	}
 
 	wg.Wait()
+
+	elapsed := time.Since(start)
+	fmt.Printf("Time taken for dis_uplaod: %s\n", elapsed)
 
 	if len(errs) > 0 {
 		return fmt.Errorf("errors occurred: %v", errs)
