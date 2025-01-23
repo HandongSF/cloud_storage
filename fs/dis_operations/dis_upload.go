@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -70,14 +69,14 @@ func Dis_Upload(args []string) (err error) {
 			}
 
 			// Get the full path of the shard
-			shardFullPath, err := GetFullPath(source)
+			// shardFullPath, err := GetFullPath(source)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("error getting full path for %s: %w", source, err))
 				return
 			}
 
 			// Get the distributed info for the shard
-			distributionFile, err := GetDistributedInfo(shardFullPath, Remote{remotes[rr].Name, remotes[rr].Type})
+			distributionFile, err := GetDistributedInfo(source, Remote{remotes[rr].Name, remotes[rr].Type})
 			if err != nil {
 				errs = append(errs, fmt.Errorf("error in GetDistributedInfo for %s: %w", source, err))
 				return
@@ -215,19 +214,6 @@ var mkdirCommandDefinition = &cobra.Command{
 			return operations.Mkdir(context.Background(), fdst, "")
 		}, true)
 	},
-}
-
-func GetFullPath(source string) (string, error) {
-	// Get the current working directory
-	currentDir, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("failed to get current directory: %v", err)
-	}
-
-	// Join the current directory with the source file path
-	fullPath := filepath.Join(currentDir, source)
-
-	return fullPath, nil
 }
 
 func dis_init(arg string) (string, error) {

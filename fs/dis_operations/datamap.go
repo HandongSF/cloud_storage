@@ -18,6 +18,8 @@ func GetDistributedInfo(filePath string, remote Remote) (DistributedFile, error)
 		return DistributedFile{}, errors.New("filePath cannot be empty")
 	}
 
+	fmt.Printf("get distirbuted info filePath: %s\n", filePath)
+
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		return DistributedFile{}, fmt.Errorf("failed to stat file %s: %v", filePath, err)

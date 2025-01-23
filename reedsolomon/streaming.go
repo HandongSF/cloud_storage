@@ -46,7 +46,6 @@ func GetShardDir() (string, error) {
 	fullConfigPath := config.GetConfigPath()
 	path := filepath.Dir(fullConfigPath)
 	filepath := filepath.Join(path, "shard")
-	fmt.Printf(filepath)
 
 	return filepath, nil
 }
@@ -112,7 +111,7 @@ func DoEncode(fname string) ([]string, int, int64) {
 	for i := range out {
 		outfn := fmt.Sprintf("%s.%d", file, i)
 		fmt.Println("Creating", outfn)
-		out[i], err = os.Create(filepath.Join(shardDir, outfn))
+		out[i], err = os.Create(filepath.Join(path, outfn))
 		paths = append(paths, out[i].Name())
 
 		checkErr(err)
@@ -213,6 +212,8 @@ func DoDecode(fname string, outfn string, padding int64) {
 
 	fname = fmt.Sprintf("%s%s", fname, fileCryptExtension)
 
+	fmt.Printf("outfn: %s, fname: %s\n", outfn, fname)
+
 	// Create Dir to save Decoded file
 	if _, err := os.Stat(outfn); os.IsNotExist(err) {
 		err := os.Mkdir(outfn, 0755)
@@ -297,8 +298,8 @@ func openInput(dataShards, parShards int, fname string) (r []io.Reader, size int
 	// Create shards and load the data.
 	shards := make([]io.Reader, dataShards+parShards)
 	for i := range shards {
-		path, err := os.Getwd()
-		infn := filepath.Join(path, shardDir, fmt.Sprintf("%s.%d", fname, i))
+		path, err := GetShardDir()
+		infn := filepath.Join(path, fmt.Sprintf("%s.%d", fname, i))
 		fmt.Println("Opening", infn)
 		f, err := os.Open(infn)
 		if err != nil {
