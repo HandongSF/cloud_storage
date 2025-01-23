@@ -9,6 +9,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/rclone/rclone/fs/config"
 )
 
 func GetDistributedInfo(filePath string, remote Remote) (DistributedFile, error) {
@@ -33,10 +35,7 @@ func MakeDataMap(originalFilePath string, distributedFiles []DistributedFile, pa
 		return errors.New("originalFilePath cannot be empty")
 	}
 
-	jsonFilePath, err := getJsonFilePath()
-	if err != nil {
-		return err
-	}
+	jsonFilePath := getJsonFilePath()
 
 	originalFileName := filepath.Base(originalFilePath)
 	originalFileInfo, err := os.Stat(originalFilePath)
@@ -69,10 +68,7 @@ func MakeDataMap(originalFilePath string, distributedFiles []DistributedFile, pa
 }
 
 func RemoveFileFromMetadata(fileName string) error {
-	jsonFilePath, err := getJsonFilePath()
-	if err != nil {
-		return err
-	}
+	jsonFilePath := getJsonFilePath()
 
 	existingFiles, err := readJsonFile(jsonFilePath)
 	if err != nil {
@@ -85,10 +81,7 @@ func RemoveFileFromMetadata(fileName string) error {
 }
 
 func GetFileInfoStruct(fileName string) (FileInfo, error) {
-	jsonFilePath, err := getJsonFilePath()
-	if err != nil {
-		return FileInfo{}, err
-	}
+	jsonFilePath := getJsonFilePath()
 
 	files, err := readJsonFile(jsonFilePath)
 	if err != nil {
@@ -105,10 +98,7 @@ func GetFileInfoStruct(fileName string) (FileInfo, error) {
 }
 
 func DoesFileStructExist(fileName string) (bool, error) {
-	jsonFilePath, err := getJsonFilePath()
-	if err != nil {
-		return false, err
-	}
+	jsonFilePath := getJsonFilePath()
 
 	files, err := readJsonFile(jsonFilePath)
 	if err != nil {
@@ -125,10 +115,7 @@ func DoesFileStructExist(fileName string) (bool, error) {
 }
 
 func GetDistributedFileStruct(fileName string) ([]DistributedFile, error) {
-	jsonFilePath, err := getJsonFilePath()
-	if err != nil {
-		return nil, err
-	}
+	jsonFilePath := getJsonFilePath()
 
 	files, err := readJsonFile(jsonFilePath)
 	if err != nil {
@@ -166,12 +153,9 @@ func calculateChecksum(filePath string) (string, error) {
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-func getJsonFilePath() (string, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("failed to get current working directory: %v", err)
-	}
-	return filepath.Join(cwd, "data", "datamap.json"), nil
+func getJsonFilePath() string {
+	path := GetRcloneDirPath()
+	return filepath.Join(path, "data", "datamap.json")
 }
 
 func readJsonFile(filePath string) ([]FileInfo, error) {
@@ -215,4 +199,11 @@ func removeFileByName(files []FileInfo, fileName string) []FileInfo {
 		}
 	}
 	return updatedFiles
+}
+
+func GetRcloneDirPath() (path string) {
+	fullConfigPath := config.GetConfigPath()
+	path = filepath.Dir(fullConfigPath)
+
+	return path
 }
