@@ -17,6 +17,7 @@ import (
 	"sync"
 
 	v2 "github.com/flew-software/filecrypt"
+	"github.com/rclone/rclone/fs/config"
 )
 
 var shardDir = "shard"
@@ -42,17 +43,12 @@ func init() {
 	}
 }
 func GetShardDir() (string, error) {
-
-	path, err := os.Getwd()
-
-	if err != nil {
-		return "", err
-
-	}
+	fullConfigPath := config.GetConfigPath()
+	path := filepath.Dir(fullConfigPath)
 	filepath := filepath.Join(path, "shard")
+	fmt.Printf(filepath)
 
 	return filepath, nil
-
 }
 func DeleteShardDir() {
 
@@ -81,8 +77,9 @@ func DoEncode(fname string) ([]string, int, int64) {
 	var paths []string
 	var padding int64
 	// Create Dir to save shards
-	if _, err := os.Stat(shardDir); os.IsNotExist(err) {
-		err := os.Mkdir(shardDir, 0755)
+	path, _ := GetShardDir()
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		err := os.Mkdir(path, 0755)
 		checkErr(err)
 	}
 
