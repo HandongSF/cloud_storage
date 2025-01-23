@@ -240,7 +240,8 @@ func DoDecode(fname string, outfn string, padding int64) {
 		out := make([]io.Writer, len(shards))
 		for i := range out {
 			if shards[i] == nil {
-				outfn := filepath.Join(shardDir, fmt.Sprintf("%s.%d", fname, i))
+				path, _ := GetShardDir()
+				outfn := filepath.Join(path, fmt.Sprintf("%s.%d", fname, i))
 				fmt.Println("Creating", outfn)
 				out[i], err = os.Create(outfn)
 				checkErr(err)
