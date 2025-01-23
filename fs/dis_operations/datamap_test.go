@@ -100,3 +100,7 @@ func TestCalculateChecksum(t *testing.T) {
 		t.Errorf("Expected checksum: %s, but got: %s", expectedChecksum, checksum)
 	}
 }
+
+func TestGetRcloneDirPath(t *testing.T) {
+	fmt.Printf(GetRcloneDirPath())
+}
