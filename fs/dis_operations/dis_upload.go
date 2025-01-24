@@ -120,7 +120,7 @@ func Dis_Upload(args []string) (err error) {
 	}
 
 	// Erase Temp Shards
-	// reedsolomon.DeleteShardDir()
+	reedsolomon.DeleteShardDir()
 
 	fmt.Printf("Completed Dis_Upload!\n")
 	return nil
