@@ -8,6 +8,8 @@
 package reedsolomon
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -72,9 +74,11 @@ func DeleteShardDir() {
 	}
 }
 
-func DoEncode(fname string) ([]string, int, int64) {
+func DoEncode(fname string) ([]string, []string, int, int64) {
 	var paths []string
+	var checksums []string
 	var padding int64
+
 	// Create Dir to save shards
 	path, _ := GetShardDir()
 	if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -108,13 +112,18 @@ func DoEncode(fname string) ([]string, int, int64) {
 	// Create the resulting files.
 	_, file := filepath.Split(encFile)
 
+	// Get path and checksum of all shards
 	for i := range out {
 		outfn := fmt.Sprintf("%s.%d", file, i)
 		fmt.Println("Creating", outfn)
 		out[i], err = os.Create(filepath.Join(path, outfn))
-		paths = append(paths, out[i].Name())
-
 		checkErr(err)
+
+		paths = append(paths, out[i].Name())
+		hash := sha256.New()
+		checksum := hash.Sum(nil)
+		checksums = append(checksums, hex.EncodeToString(checksum))
+
 	}
 
 	// Split into files.
@@ -164,7 +173,7 @@ func DoEncode(fname string) ([]string, int, int64) {
 	err = os.Remove(encFile)
 	checkErr(err)
 
-	return paths, sizePerShard, padding
+	return paths, checksums, sizePerShard, padding
 }
 
 func trimPadding(f *os.File, trimSize int64) {
@@ -208,7 +217,7 @@ func trimPadding(f *os.File, trimSize int64) {
 	}
 }
 
-func DoDecode(fname string, outfn string, padding int64) {
+func DoDecode(fname string, outfn string, padding int64, checksums []string) {
 
 	fname = fmt.Sprintf("%s%s", fname, fileCryptExtension)
 
@@ -273,8 +282,6 @@ func DoDecode(fname string, outfn string, padding int64) {
 	fmt.Println("Writing data to", outfn)
 	f, err := os.Create(outfn)
 	checkErr(err)
-
-	defer f.Close()
 
 	shards, size, err = openInput(*dataShards, *parShards, fname)
 	checkErr(err)
