@@ -13,6 +13,9 @@ type DistributedFile struct {
 	DistributedFile string `json:"distributed_file_name"`
 	DisFileSize     int64  `json:"distributed_file_size"`
 	Remote          Remote `json:"remote"`
+	Checksum        string `json:"dis_checksum"`
+	Uploaded        int    `json:"uploaded"`
+	Deleted         int    `json:"deleted"`
 }
 
 type Remote struct {
