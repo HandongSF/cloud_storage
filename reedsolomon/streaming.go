@@ -177,7 +177,7 @@ func DoEncode(fname string) ([]string, []string, int, int64) {
 	//여기서 그냥 모든 파일을 닫고 checksum을 계산한다.
 	for i := range parity {
 		out[*dataShards+i].Close()
-		checksum, err := calculateChecksum(out[i].Name())
+		checksum, err := calculateChecksum(out[*dataShards+i].Name())
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: calculating checksum\n")
 			os.Exit(1)
