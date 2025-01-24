@@ -99,7 +99,8 @@ func Dis_Download(args []string) (err error) {
 		return fmt.Errorf("checksum is different! so can't download file")
 	}
 
-	reedsolomon.DeleteShardDir()
+	// Need fix, not deleting shards correctly
+	//reedsolomon.DeleteShardDir()
 
 	fmt.Printf("File successfully downloaded to %s\n", absolutePath)
 
