@@ -120,10 +120,7 @@ func DoEncode(fname string) ([]string, []string, int, int64) {
 		checkErr(err)
 
 		paths = append(paths, out[i].Name())
-		hash := sha256.New()
-		checksum := hash.Sum(nil)
-		checksums = append(checksums, hex.EncodeToString(checksum))
-
+		fmt.Printf("name : %s \n", out[i].Name())
 	}
 
 	// Split into files.
@@ -131,7 +128,7 @@ func DoEncode(fname string) ([]string, []string, int, int64) {
 	for i := range data {
 		data[i] = out[i]
 	}
-	// Do the split
+	// Do the split 여기서 파일 씀
 	padding, err = enc.Split(f, data, instat.Size())
 	fmt.Printf("Padding : %d\n", padding)
 	checkErr(err)
@@ -146,13 +143,19 @@ func DoEncode(fname string) ([]string, []string, int, int64) {
 		input[i] = f
 
 		defer f.Close()
+		checksum, err := calculateChecksum(out[i].Name())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: calculating checksum\n")
+			os.Exit(1)
+		}
+		checksums = append(checksums, checksum)
 	}
 
 	// Create parity output writers
 	parity := make([]io.Writer, *parShards)
 	for i := range parity {
 		parity[i] = out[*dataShards+i]
-		defer out[*dataShards+i].Close()
+		// defer out[*dataShards+i].Close()
 	}
 
 	// Calculate the size Per Shard
@@ -164,10 +167,23 @@ func DoEncode(fname string) ([]string, []string, int, int64) {
 
 	sizePerShard := int(fInfo.Size())
 
+	fileShard.Close()
+
 	// Encode parity
 	err = enc.Encode(input, parity)
 	checkErr(err)
 	fmt.Printf("File split into %d data + %d parity shards.\n", *dataShards, *parShards)
+
+	//여기서 그냥 모든 파일을 닫고 checksum을 계산한다.
+	for i := range parity {
+		out[*dataShards+i].Close()
+		checksum, err := calculateChecksum(out[i].Name())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: calculating checksum\n")
+			os.Exit(1)
+		}
+		checksums = append(checksums, checksum)
+	}
 
 	// Remove the Encrypted file
 	err = os.Remove(encFile)
@@ -938,4 +954,18 @@ func checkErr(err error) {
 		fmt.Fprintf(os.Stderr, "Error: %s", err.Error())
 		os.Exit(2)
 	}
+}
+
+func calculateChecksum(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open file for checksum: %v", err)
+	}
+	defer file.Close()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", fmt.Errorf("failed to compute checksum: %v", err)
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
