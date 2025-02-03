@@ -31,8 +31,10 @@ func Dis_Upload(args []string) (err error) {
 	}
 
 	if isDuplicate {
-		fmt.Printf("Duplicate exists for file: %s", args[0])
-		return nil
+		result := ShowDescription(args[0])
+		if !result {
+			return nil
+		}
 	}
 
 	dis_names, checksums, shardSize, padding := reedsolomon.DoEncode(absolutePath)
