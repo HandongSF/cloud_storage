@@ -233,10 +233,11 @@ func trimPadding(f *os.File, trimSize int64) {
 	}
 }
 
-func DoDecode(fname string, outfn string, padding int64, checksums []string) {
+func DoDecode(fname string, outfn string, padding int64, confChecksums []string) {
+	// ConfChecksums is the checksums from configfile
 
 	fname = fmt.Sprintf("%s%s", fname, fileCryptExtension)
-
+	shardDir, _ := GetShardDir()
 	fmt.Printf("outfn: %s, fname: %s\n", outfn, fname)
 
 	// Create Dir to save Decoded file
@@ -252,6 +253,21 @@ func DoDecode(fname string, outfn string, padding int64, checksums []string) {
 	// Open the inputs
 	shards, size, err := openInput(*dataShards, *parShards, fname)
 	checkErr(err)
+
+	// Caclulate downloaded Checksum of Shards
+	var shardChecksums []string
+	for i := 0; i < len(confChecksums); i++ {
+		tmpPath := fmt.Sprintf("%s/%s.%d", shardDir, fname, i)
+		fmt.Println("===" + tmpPath + "===")
+		tmpChecksum, err := calculateChecksum(tmpPath)
+		fmt.Println(tmpPath + "'s checksum is ::: " + tmpChecksum)
+		checkErr(err)
+		shardChecksums = append(shardChecksums, tmpChecksum)
+	}
+	tmpPath := fmt.Sprintf("%s/%s", shardDir, fname)
+
+	// Compare Two shard dir and Delete if error occured
+	compareandDeleteChecksum(shardChecksums, confChecksums, tmpPath)
 
 	// Verify the shards
 	ok, err := enc.Verify(shards)
@@ -968,4 +984,24 @@ func calculateChecksum(filePath string) (string, error) {
 		return "", fmt.Errorf("failed to compute checksum: %v", err)
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func compareandDeleteChecksum(serverChecksum []string, confChecksum []string, path string) error {
+
+	minLength := len(serverChecksum)
+	if len(confChecksum) < minLength {
+		minLength = len(confChecksum)
+	}
+	for i := 0; i < minLength; i++ {
+		if serverChecksum[i] != confChecksum[i] {
+			mismatched := fmt.Sprintf("%s.%d", path, i)
+			fmt.Printf("hit delete\n")
+			err := os.Remove(mismatched)
+
+			if err != nil {
+				return fmt.Errorf(" Delete failed: %s, error code: %w", mismatched, err)
+			}
+		}
+	}
+	return nil
 }
