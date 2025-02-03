@@ -246,18 +246,6 @@ func DoDecode(fname string, outfn string, padding int64, confChecksums []string)
 		return err
 	}
 
-	// Create matrix
-	enc, err := NewStream(*dataShards, *parShards)
-	if err != nil {
-		return err
-	}
-
-	// Open the inputs
-	shards, size, err := openInput(*dataShards, *parShards, fname)
-	if err != nil {
-		return err
-	}
-
 	// Caclulate downloaded Checksum of Shards
 	var shardChecksums []string
 	for i := 0; i < len(confChecksums); i++ {
@@ -271,6 +259,18 @@ func DoDecode(fname string, outfn string, padding int64, confChecksums []string)
 
 	// Compare Two shard dir and Delete if error occured
 	compareandDeleteChecksum(shardChecksums, confChecksums, tmpPath)
+
+	// Create matrix
+	enc, err := NewStream(*dataShards, *parShards)
+	if err != nil {
+		return err
+	}
+
+	// Open the inputs
+	shards, size, err := openInput(*dataShards, *parShards, fname)
+	if err != nil {
+		return err
+	}
 
 	// Verify the shards
 	ok, err := enc.Verify(shards)
