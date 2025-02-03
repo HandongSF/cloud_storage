@@ -233,7 +233,7 @@ func trimPadding(f *os.File, trimSize int64) {
 	}
 }
 
-func DoDecode(fname string, outfn string, padding int64, confChecksums []string) {
+func DoDecode(fname string, outfn string, padding int64, confChecksums []string) error {
 	// ConfChecksums is the checksums from configfile
 
 	fname = fmt.Sprintf("%s%s", fname, fileCryptExtension)
@@ -243,16 +243,20 @@ func DoDecode(fname string, outfn string, padding int64, confChecksums []string)
 	// Create Dir to save Decoded file
 	if _, err := os.Stat(outfn); os.IsNotExist(err) {
 		err := os.Mkdir(outfn, 0755)
-		checkErr(err)
+		return err
 	}
 
 	// Create matrix
 	enc, err := NewStream(*dataShards, *parShards)
-	checkErr(err)
+	if err != nil {
+		return err
+	}
 
 	// Open the inputs
 	shards, size, err := openInput(*dataShards, *parShards, fname)
-	checkErr(err)
+	if err != nil {
+		return err
+	}
 
 	// Caclulate downloaded Checksum of Shards
 	var shardChecksums []string
@@ -261,7 +265,9 @@ func DoDecode(fname string, outfn string, padding int64, confChecksums []string)
 		fmt.Println("===" + tmpPath + "===")
 		tmpChecksum, err := calculateChecksum(tmpPath)
 		fmt.Println(tmpPath + "'s checksum is ::: " + tmpChecksum)
-		checkErr(err)
+		if err != nil {
+			return err
+		}
 		shardChecksums = append(shardChecksums, tmpChecksum)
 	}
 	tmpPath := fmt.Sprintf("%s/%s", shardDir, fname)
@@ -276,7 +282,10 @@ func DoDecode(fname string, outfn string, padding int64, confChecksums []string)
 	} else {
 		fmt.Println("Verification failed. Reconstructing data")
 		shards, size, err = openInput(*dataShards, *parShards, fname)
-		checkErr(err)
+		if err != nil {
+			return err
+		}
+
 		// Create out destination writers
 		out := make([]io.Writer, len(shards))
 		for i := range out {
@@ -285,53 +294,70 @@ func DoDecode(fname string, outfn string, padding int64, confChecksums []string)
 				outfn := filepath.Join(path, fmt.Sprintf("%s.%d", fname, i))
 				fmt.Println("Creating", outfn)
 				out[i], err = os.Create(outfn)
-				checkErr(err)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		err = enc.Reconstruct(shards, out)
 		if err != nil {
 			fmt.Println("Reconstruct failed -", err)
-			os.Exit(1)
+			return err
 		}
 		// Close output.
 		for i := range out {
 			if out[i] != nil {
 				err := out[i].(*os.File).Close()
-				checkErr(err)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		shards, size, err = openInput(*dataShards, *parShards, fname)
 		ok, err = enc.Verify(shards)
 		if !ok {
 			fmt.Println("Verification failed after reconstruction, data likely corrupted:", err)
-			os.Exit(1)
+			return err
 		}
-		checkErr(err)
+
+		if err != nil {
+			return err
+		}
 
 	}
 	outfn = filepath.Join(outfn, fname)
 
 	fmt.Println("Writing data to", outfn)
 	f, err := os.Create(outfn)
-	checkErr(err)
-
+	if err != nil {
+		return err
+	}
 	shards, size, err = openInput(*dataShards, *parShards, fname)
-	checkErr(err)
+	if err != nil {
+		return err
+	}
 
 	// We don't know the exact filesize.
 	err = enc.Join(f, shards, int64(*dataShards)*size)
-	checkErr(err)
+	if err != nil {
+		return err
+	}
 	if padding > 0 {
 		trimPadding(f, padding)
 	}
 	originFile, err := app.Decrypt(outfn, v2.Passphrase(password))
 	fmt.Println("====  origin file Location ", originFile)
-	checkErr(err)
+	if err != nil {
+		return err
+	}
 	f.Close()
 	// Remove the Decodeded file
 	err = os.Remove(outfn)
-	checkErr(err)
+	if err != nil {
+		return err
+	}
 
+	return nil
 }
 
 func openInput(dataShards, parShards int, fname string) (r []io.Reader, size int64, err error) {

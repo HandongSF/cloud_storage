@@ -14,15 +14,30 @@ func ShowDescription(filename string) bool {
 	return DoOverwrite()
 }
 
-func DoOverwrite() bool {
-	switch i := config.CommandDefault([]string{"yYes overwrite this file", "nNo skip the file"}, 0); i {
+func ShowDescription_RemoveFile(filename string) bool {
+	fmt.Printf("Error occured during decoding file %s\n", filename)
+	fmt.Println()
+	fmt.Printf("Remove file from remote completely? (This will effectively call dis_rm <file_name>)\n")
+	return DoRemove()
+}
+
+func GetUserConfirmation(prompt string, options []string, defaultIndex int) bool {
+	switch i := config.CommandDefault(options, defaultIndex); i {
 	case 'y':
 		return true
 	case 'n':
 		return false
 	default:
 		fmt.Printf("Invalid Input!\n")
-		fmt.Printf("Do overwrite the file?\n")
-		return DoOverwrite()
+		fmt.Printf("%s\n", prompt)
+		return GetUserConfirmation(prompt, options, defaultIndex)
 	}
+}
+
+func DoOverwrite() bool {
+	return GetUserConfirmation("Do you want to overwrite the file?", []string{"yYes overwrite this file", "nNo skip the file"}, 0)
+}
+
+func DoRemove() bool {
+	return GetUserConfirmation("Do you want to remove the file?", []string{"yYes remove this file", "nNo keep the file"}, 0)
 }

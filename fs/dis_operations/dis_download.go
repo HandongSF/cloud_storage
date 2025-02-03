@@ -88,7 +88,17 @@ func Dis_Download(args []string) (err error) {
 		checksums = append(checksums, each.Checksum)
 	}
 
-	reedsolomon.DoDecode(args[0], absolutePath, fileInfo.Padding, checksums)
+	err = reedsolomon.DoDecode(args[0], absolutePath, fileInfo.Padding, checksums)
+	if err != nil {
+		result := ShowDescription_RemoveFile(args[0])
+		if result {
+			err = Dis_rm([]string{args[0]})
+			if err != nil {
+				return err
+			}
+			return nil
+		}
+	}
 
 	//check checksum
 	//if checksum error -> delete file
