@@ -208,3 +208,14 @@ func GetRcloneDirPath() (path string) {
 
 	return path
 }
+
+func GetChecksumList(name string) (checksums []string) {
+	disFileInfo, err := GetDistributedFileStruct(name)
+	if err != nil {
+		fmt.Printf("no file data")
+	}
+	for _, info := range disFileInfo {
+		checksums = append(checksums, info.Checksum)
+	}
+	return checksums
+}
