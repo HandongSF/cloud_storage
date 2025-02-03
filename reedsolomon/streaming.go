@@ -263,11 +263,8 @@ func DoDecode(fname string, outfn string, padding int64, confChecksums []string)
 	for i := 0; i < len(confChecksums); i++ {
 		tmpPath := fmt.Sprintf("%s/%s.%d", shardDir, fname, i)
 		fmt.Println("===" + tmpPath + "===")
-		tmpChecksum, err := calculateChecksum(tmpPath)
+		tmpChecksum, _ := calculateChecksum(tmpPath)
 		fmt.Println(tmpPath + "'s checksum is ::: " + tmpChecksum)
-		if err != nil {
-			return err
-		}
 		shardChecksums = append(shardChecksums, tmpChecksum)
 	}
 	tmpPath := fmt.Sprintf("%s/%s", shardDir, fname)
