@@ -96,8 +96,8 @@ func Dis_Download(args []string) (err error) {
 			if err != nil {
 				return err
 			}
-			return nil
 		}
+		return nil
 	}
 
 	//check checksum
