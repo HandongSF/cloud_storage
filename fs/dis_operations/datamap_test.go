@@ -106,3 +106,10 @@ func TestCalculateChecksum(t *testing.T) {
 func TestGetRcloneDirPath(t *testing.T) {
 	fmt.Printf(GetRcloneDirPath())
 }
+
+func TestGetChecksumList(t *testing.T) {
+	checksums := GetChecksumList("IMG_6146.JPG")
+	for idx, checksum := range checksums {
+		fmt.Println(idx, " ", checksum)
+	}
+}
