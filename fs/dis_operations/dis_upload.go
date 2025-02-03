@@ -35,7 +35,13 @@ func Dis_Upload(args []string) (err error) {
 		return nil
 	}
 
-	dis_names, shardSize, padding := reedsolomon.DoEncode(absolutePath)
+	dis_names, checksums, shardSize, padding := reedsolomon.DoEncode(absolutePath)
+
+	//for debug
+	for _, each := range checksums {
+		fmt.Printf("checksum: %s\n", each)
+	}
+
 	fmt.Printf("%d\n", padding)
 	remotes := config.GetRemotes()
 	distributedFileArray := make([]DistributedFile, len(dis_names))
@@ -76,7 +82,7 @@ func Dis_Upload(args []string) (err error) {
 			}
 
 			// Get the distributed info for the shard
-			distributionFile, err := GetDistributedInfo(source, Remote{remotes[rr].Name, remotes[rr].Type})
+			distributionFile, err := GetDistributedInfo(source, Remote{remotes[rr].Name, remotes[rr].Type}, checksums[i])
 			if err != nil {
 				errs = append(errs, fmt.Errorf("error in GetDistributedInfo for %s: %w", source, err))
 				return

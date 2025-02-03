@@ -8,6 +8,8 @@
 package reedsolomon
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -72,9 +74,11 @@ func DeleteShardDir() {
 	}
 }
 
-func DoEncode(fname string) ([]string, int, int64) {
+func DoEncode(fname string) ([]string, []string, int, int64) {
 	var paths []string
+	var checksums []string
 	var padding int64
+
 	// Create Dir to save shards
 	path, _ := GetShardDir()
 	if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -108,13 +112,15 @@ func DoEncode(fname string) ([]string, int, int64) {
 	// Create the resulting files.
 	_, file := filepath.Split(encFile)
 
+	// Get path and checksum of all shards
 	for i := range out {
 		outfn := fmt.Sprintf("%s.%d", file, i)
 		fmt.Println("Creating", outfn)
 		out[i], err = os.Create(filepath.Join(path, outfn))
-		paths = append(paths, out[i].Name())
-
 		checkErr(err)
+
+		paths = append(paths, out[i].Name())
+		fmt.Printf("name : %s \n", out[i].Name())
 	}
 
 	// Split into files.
@@ -122,7 +128,7 @@ func DoEncode(fname string) ([]string, int, int64) {
 	for i := range data {
 		data[i] = out[i]
 	}
-	// Do the split
+	// Do the split 여기서 파일 씀
 	padding, err = enc.Split(f, data, instat.Size())
 	fmt.Printf("Padding : %d\n", padding)
 	checkErr(err)
@@ -137,13 +143,19 @@ func DoEncode(fname string) ([]string, int, int64) {
 		input[i] = f
 
 		defer f.Close()
+		checksum, err := calculateChecksum(out[i].Name())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: calculating checksum\n")
+			os.Exit(1)
+		}
+		checksums = append(checksums, checksum)
 	}
 
 	// Create parity output writers
 	parity := make([]io.Writer, *parShards)
 	for i := range parity {
 		parity[i] = out[*dataShards+i]
-		defer out[*dataShards+i].Close()
+		// defer out[*dataShards+i].Close()
 	}
 
 	// Calculate the size Per Shard
@@ -155,16 +167,29 @@ func DoEncode(fname string) ([]string, int, int64) {
 
 	sizePerShard := int(fInfo.Size())
 
+	fileShard.Close()
+
 	// Encode parity
 	err = enc.Encode(input, parity)
 	checkErr(err)
 	fmt.Printf("File split into %d data + %d parity shards.\n", *dataShards, *parShards)
 
+	//여기서 그냥 모든 파일을 닫고 checksum을 계산한다.
+	for i := range parity {
+		out[*dataShards+i].Close()
+		checksum, err := calculateChecksum(out[*dataShards+i].Name())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: calculating checksum\n")
+			os.Exit(1)
+		}
+		checksums = append(checksums, checksum)
+	}
+
 	// Remove the Encrypted file
 	err = os.Remove(encFile)
 	checkErr(err)
 
-	return paths, sizePerShard, padding
+	return paths, checksums, sizePerShard, padding
 }
 
 func trimPadding(f *os.File, trimSize int64) {
@@ -208,7 +233,7 @@ func trimPadding(f *os.File, trimSize int64) {
 	}
 }
 
-func DoDecode(fname string, outfn string, padding int64) {
+func DoDecode(fname string, outfn string, padding int64, checksums []string) {
 
 	fname = fmt.Sprintf("%s%s", fname, fileCryptExtension)
 
@@ -273,8 +298,6 @@ func DoDecode(fname string, outfn string, padding int64) {
 	fmt.Println("Writing data to", outfn)
 	f, err := os.Create(outfn)
 	checkErr(err)
-
-	defer f.Close()
 
 	shards, size, err = openInput(*dataShards, *parShards, fname)
 	checkErr(err)
@@ -931,4 +954,18 @@ func checkErr(err error) {
 		fmt.Fprintf(os.Stderr, "Error: %s", err.Error())
 		os.Exit(2)
 	}
+}
+
+func calculateChecksum(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open file for checksum: %v", err)
+	}
+	defer file.Close()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", fmt.Errorf("failed to compute checksum: %v", err)
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
