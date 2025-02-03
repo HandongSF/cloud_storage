@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -69,8 +70,17 @@ func Dis_Upload(args []string) (err error) {
 		go func(i, rr int, source string, dest string) {
 			defer wg.Done()
 
+			fileName := filepath.Base(source)
+			dir := filepath.Dir(source)
+
+			hashedFileName, err := ConvertFileNameForUP(fileName)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("failed to converting file name %v", err))
+			}
+			source = filepath.Join(dir, hashedFileName)
+
 			// Perform the upload (Via API Call)
-			err := remoteCallCopy([]string{source, dest})
+			err = remoteCallCopy([]string{source, dest})
 			if err != nil {
 				errs = append(errs, fmt.Errorf("error in remoteCallCopy for file %s: %w", source, err))
 				return
@@ -84,7 +94,7 @@ func Dis_Upload(args []string) (err error) {
 			}
 
 			// Get the distributed info for the shard
-			distributionFile, err := GetDistributedInfo(source, Remote{remotes[rr].Name, remotes[rr].Type}, checksums[i])
+			distributionFile, err := GetDistributedInfo(fileName, source, Remote{remotes[rr].Name, remotes[rr].Type}, checksums[i])
 			if err != nil {
 				errs = append(errs, fmt.Errorf("error in GetDistributedInfo for %s: %w", source, err))
 				return

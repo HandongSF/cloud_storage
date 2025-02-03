@@ -13,7 +13,7 @@ import (
 	"github.com/rclone/rclone/fs/config"
 )
 
-func GetDistributedInfo(filePath string, remote Remote, checksum string) (DistributedFile, error) {
+func GetDistributedInfo(fileName string, filePath string, remote Remote, checksum string) (DistributedFile, error) {
 	if filePath == "" {
 		return DistributedFile{}, errors.New("filePath cannot be empty")
 	}
@@ -24,7 +24,7 @@ func GetDistributedInfo(filePath string, remote Remote, checksum string) (Distri
 	}
 
 	return DistributedFile{
-		DistributedFile: filepath.Base(filePath),
+		DistributedFile: fileName,
 		DisFileSize:     fileInfo.Size(),
 		Remote:          remote,
 		Checksum:        checksum,

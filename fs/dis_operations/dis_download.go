@@ -43,18 +43,26 @@ func Dis_Download(args []string) (err error) {
 
 	start := time.Now()
 	for _, disFileStruct := range distributedFileInfos {
-		source := fmt.Sprintf("%s:%s/%s", disFileStruct.Remote.Name, remoteDirectory, disFileStruct.DistributedFile)
+		hashedFileName, err := CalculateHash(disFileStruct.DistributedFile)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("error in CalculateHash: %v", err))
+		}
+		source := fmt.Sprintf("%s:%s/%s", disFileStruct.Remote.Name, remoteDirectory, hashedFileName)
 		fmt.Printf("Downloading shard %s to %s of size %d\n", source, shardDir, disFileStruct.DisFileSize)
 
 		wg.Add(1)
-		go func(source, shardDir string) {
+		go func(source, shardDir, hashedFileName, originalFileName string) {
 			defer wg.Done()
 			if err := remoteCallCopyforDown([]string{source, shardDir}); err != nil {
 				mu.Lock()
 				errs = append(errs, fmt.Errorf("error in remoteCallCopy for file %s: %v", source, err))
 				mu.Unlock()
 			}
-		}(source, shardDir)
+			err := ConvertFileNameForDo(hashedFileName, originalFileName)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("error in convertFileNameFordo: %v", err))
+			}
+		}(source, shardDir, hashedFileName, disFileStruct.DistributedFile)
 	}
 
 	wg.Wait()
