@@ -22,7 +22,7 @@ func TestGetDistributedInfo(t *testing.T) {
 
 	var checksums = []string{"40cadf18f34e25aded48efe68f1479ef5b24a885f4840f59d47175b33cf3a0d3"}
 
-	distributedFile, err := GetDistributedInfo(fileName, remote, checksums[0])
+	distributedFile, err := GetDistributedInfo(fileName, fileName, remote, checksums[0])
 	if err != nil {
 		t.Errorf("Expected no error, but got: %v", err)
 	}
