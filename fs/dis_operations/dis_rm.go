@@ -39,7 +39,11 @@ func Dis_rm(arg []string) (err error) {
 				go func(info DistributedFile) {
 					defer wg.Done()
 					//arg인자에 Info.Remote.Name:Distribution/info.DistributedFile
-					remotePath := fmt.Sprintf("%s:%s/%s", info.Remote.Name, remoteDirectory, info.DistributedFile)
+					hashedFileName, err := CalculateHash(info.DistributedFile)
+					if err != nil {
+						errCh <- fmt.Errorf("failed to calculate hash %v", err)
+					}
+					remotePath := fmt.Sprintf("%s:%s/%s", info.Remote.Name, remoteDirectory, hashedFileName)
 					fmt.Printf("Deleting file on remote: %s\n", remotePath)
 
 					if err := remoteCallDeleteFile([]string{remotePath}); err != nil {
