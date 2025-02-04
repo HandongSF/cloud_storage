@@ -374,7 +374,6 @@ func DoDecode(fname string, outfn string, padding int64, confChecksums []string)
 	}
 
 	closeInput(shards)
-	DeleteShardDir()
 
 	return nil
 }
