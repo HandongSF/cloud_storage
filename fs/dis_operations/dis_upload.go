@@ -101,6 +101,8 @@ func Dis_Upload(args []string) (err error) {
 			}
 
 			mu.Lock()
+			// Erase Temp Shard
+			reedsolomon.DeleteShardWithFileNames([]string{hashedFileName})
 			distributedFileArray[i] = distributionFile
 			mu.Unlock()
 		}(i, rr_counter, source, dest)
@@ -130,9 +132,6 @@ func Dis_Upload(args []string) (err error) {
 	if err != nil {
 		return err
 	}
-
-	// Erase Temp Shards
-	reedsolomon.DeleteShardDir()
 
 	fmt.Printf("Completed Dis_Upload!\n")
 	return nil

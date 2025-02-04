@@ -25,6 +25,8 @@ func Dis_Download(args []string) (err error) {
 		return fmt.Errorf("file not found in remote")
 	}
 
+	var fileNames []string
+
 	// Get Distribution list
 	distributedFileInfos, err := GetDistributedFileStruct(args[0])
 	if err != nil {
@@ -53,15 +55,29 @@ func Dis_Download(args []string) (err error) {
 		wg.Add(1)
 		go func(source, shardDir, hashedFileName, originalFileName string) {
 			defer wg.Done()
+
+			var errOccurred bool
+
 			if err := remoteCallCopyforDown([]string{source, shardDir}); err != nil {
 				mu.Lock()
 				errs = append(errs, fmt.Errorf("error in remoteCallCopy for file %s: %v", source, err))
 				mu.Unlock()
+				errOccurred = true
 			}
-			err := ConvertFileNameForDo(hashedFileName, originalFileName)
-			if err != nil {
+
+			if err := ConvertFileNameForDo(hashedFileName, originalFileName); err != nil {
+				mu.Lock()
 				errs = append(errs, fmt.Errorf("error in convertFileNameFordo: %v", err))
+				mu.Unlock()
+				errOccurred = true
 			}
+
+			if !errOccurred {
+				mu.Lock()
+				fileNames = append(fileNames, originalFileName)
+				mu.Unlock()
+			}
+
 		}(source, shardDir, hashedFileName, disFileStruct.DistributedFile)
 	}
 
@@ -128,10 +144,10 @@ func Dis_Download(args []string) (err error) {
 		return fmt.Errorf("checksum is different! so can't download file")
 	}
 
-	// Need fix, not deleting shards correctly
-	//reedsolomon.DeleteShardDir()
-
 	fmt.Printf("File successfully downloaded to %s\n", absolutePath)
+
+	// Erase Temp Shard
+	reedsolomon.DeleteShardWithFileNames(fileNames)
 
 	return nil
 }

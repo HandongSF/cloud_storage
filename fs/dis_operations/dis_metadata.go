@@ -1,5 +1,7 @@
 package dis_operations
 
+import "github.com/rclone/rclone/fs/config"
+
 // The Top Data Structure
 type FileInfo struct {
 	FileName             string            `json:"original_file_name"`
@@ -21,6 +23,11 @@ type DistributedFile struct {
 type Remote struct {
 	Name string `json:"remote_name"`
 	Type string `json:"remote_type"`
+}
+
+type LoadBalancerInfo struct {
+	RoundRobinCounter       int                   `json:"RoundRobin_Counter"`
+	RemoteConnectionCounter map[config.Remote]int `json:"Remote_Connection_Counter"`
 }
 
 var remoteDirectory = "Distribution"
