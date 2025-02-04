@@ -275,9 +275,12 @@ func DoDecode(fname string, outfn string, padding int64, confChecksums []string)
 	// Verify the shards
 	ok, err := enc.Verify(shards)
 	if ok {
+		closeInput(shards)
 		fmt.Println("No reconstruction needed")
 	} else {
 		fmt.Println("Verification failed. Reconstructing data")
+		closeInput(shards)
+
 		shards, size, err = openInput(*dataShards, *parShards, fname)
 		if err != nil {
 			return err
@@ -329,6 +332,7 @@ func DoDecode(fname string, outfn string, padding int64, confChecksums []string)
 	if err != nil {
 		return err
 	}
+
 	shards, size, err = openInput(*dataShards, *parShards, fname)
 	if err != nil {
 		return err
@@ -353,6 +357,9 @@ func DoDecode(fname string, outfn string, padding int64, confChecksums []string)
 	if err != nil {
 		return err
 	}
+
+	closeInput(shards)
+	DeleteShardDir()
 
 	return nil
 }
@@ -381,6 +388,17 @@ func openInput(dataShards, parShards int, fname string) (r []io.Reader, size int
 		}
 	}
 	return shards, size, nil
+}
+
+func closeInput(shards []io.Reader) {
+	for _, r := range shards {
+		if f, ok := r.(*os.File); ok {
+			err := f.Close()
+			if err != nil {
+				fmt.Println("Error closing file:", err)
+			}
+		}
+	}
 }
 
 // StreamEncoder is an interface to encode Reed-Salomon parity sets for your data.
