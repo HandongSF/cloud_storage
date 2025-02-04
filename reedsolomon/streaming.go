@@ -51,6 +51,20 @@ func GetShardDir() (string, error) {
 
 	return filepath, nil
 }
+
+func DeleteShardWithFileNames(fileNames []string) {
+	dir, _ := GetShardDir()
+	for _, fileName := range fileNames {
+		filePath := filepath.Join(dir, fileName)
+
+		err := os.Remove(filePath)
+		if err != nil {
+			fmt.Printf("Error deleting file %s: %v\n", filePath, err)
+			continue
+		}
+		fmt.Printf("Successfully deleted file: %s\n", filePath)
+	}
+}
 func DeleteShardDir() {
 
 	dir, err := GetShardDir()
@@ -128,7 +142,7 @@ func DoEncode(fname string) ([]string, []string, int, int64) {
 	for i := range data {
 		data[i] = out[i]
 	}
-	// Do the split 여기서 파일 씀
+	// Do the split
 	padding, err = enc.Split(f, data, instat.Size())
 	fmt.Printf("Padding : %d\n", padding)
 	checkErr(err)
@@ -174,7 +188,7 @@ func DoEncode(fname string) ([]string, []string, int, int64) {
 	checkErr(err)
 	fmt.Printf("File split into %d data + %d parity shards.\n", *dataShards, *parShards)
 
-	//여기서 그냥 모든 파일을 닫고 checksum을 계산한다.
+	//Calculate Shard Checksums.
 	for i := range parity {
 		out[*dataShards+i].Close()
 		checksum, err := calculateChecksum(out[*dataShards+i].Name())
@@ -352,6 +366,7 @@ func DoDecode(fname string, outfn string, padding int64, confChecksums []string)
 		return err
 	}
 	f.Close()
+
 	// Remove the Decodeded file
 	err = os.Remove(outfn)
 	if err != nil {
