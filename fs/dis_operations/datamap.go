@@ -240,7 +240,7 @@ func CheckFlagAndState() (bool, string) {
 	flag := false
 	for _, info := range infos {
 		if info.Flag {
-			return flag, info.State
+			return info.Flag, info.State
 		}
 	}
 	return flag, ""
