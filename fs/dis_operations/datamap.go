@@ -9,29 +9,29 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/rclone/rclone/fs/config"
 )
 
+var jsonFileMutex sync.Mutex
+
+// making distributed file info
 func GetDistributedInfo(fileName string, filePath string, remote Remote, checksum string) (DistributedFile, error) {
 	if filePath == "" {
 		return DistributedFile{}, errors.New("filePath cannot be empty")
 	}
 
-	fileInfo, err := os.Stat(filePath)
-	if err != nil {
-		return DistributedFile{}, fmt.Errorf("failed to stat file %s: %v", filePath, err)
-	}
-
 	return DistributedFile{
 		DistributedFile: fileName,
-		DisFileSize:     fileInfo.Size(),
 		Remote:          remote,
 		Checksum:        checksum,
+		Check:           false,
 	}, nil
 }
 
-func MakeDataMap(originalFilePath string, distributedFiles []DistributedFile, paddingAmount int64) error {
+// making file info about original file
+func MakeDataMap(originalFilePath string, distributedFiles []DistributedFile, disFileSize int64, paddingAmount int64) error {
 	if originalFilePath == "" {
 		return errors.New("originalFilePath cannot be empty")
 	}
@@ -52,6 +52,9 @@ func MakeDataMap(originalFilePath string, distributedFiles []DistributedFile, pa
 	newFileInfo := FileInfo{
 		FileName:             originalFileName,
 		FileSize:             originalFileInfo.Size(),
+		DisFileSize:          disFileSize,
+		Flag:                 true,
+		State:                "upload",
 		Checksum:             checksum,
 		Padding:              paddingAmount,
 		DistributedFileInfos: distributedFiles,
@@ -132,6 +135,7 @@ func GetDistributedFileStruct(fileName string) ([]DistributedFile, error) {
 	return nil, fmt.Errorf("file name '%s' not found", fileName)
 }
 
+// returning checksum of file we want to know
 func GetChecksum(fileName string) string {
 	fileInfo, err := GetFileInfoStruct(fileName)
 	if err != nil {
@@ -140,6 +144,7 @@ func GetChecksum(fileName string) string {
 	return fileInfo.Checksum
 }
 
+// calculating checksum of file
 func calculateChecksum(filePath string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -154,11 +159,13 @@ func calculateChecksum(filePath string) (string, error) {
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
+// getting path existing json file
 func getJsonFilePath() string {
 	path := GetRcloneDirPath()
 	return filepath.Join(path, "data", "datamap.json")
 }
 
+// reading json file and then returning original file infos
 func readJsonFile(filePath string) ([]FileInfo, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -176,6 +183,7 @@ func readJsonFile(filePath string) ([]FileInfo, error) {
 	return files, nil
 }
 
+// writting original file infos on json file
 func writeJsonFile(filePath string, data []FileInfo) error {
 	if err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm); err != nil {
 		return fmt.Errorf("failed to create directory: %v", err)
@@ -192,6 +200,7 @@ func writeJsonFile(filePath string, data []FileInfo) error {
 	return nil
 }
 
+// returning original file infos without file we want to remove
 func removeFileByName(files []FileInfo, fileName string) []FileInfo {
 	updatedFiles := []FileInfo{}
 	for _, file := range files {
@@ -202,6 +211,7 @@ func removeFileByName(files []FileInfo, fileName string) []FileInfo {
 	return updatedFiles
 }
 
+// getting rclone dir path
 func GetRcloneDirPath() (path string) {
 	fullConfigPath := config.GetConfigPath()
 	path = filepath.Dir(fullConfigPath)
@@ -209,6 +219,7 @@ func GetRcloneDirPath() (path string) {
 	return path
 }
 
+// getting list of checksums about distributed files
 func GetChecksumList(name string) (checksums []string) {
 	disFileInfo, err := GetDistributedFileStruct(name)
 	if err != nil {
@@ -218,4 +229,92 @@ func GetChecksumList(name string) (checksums []string) {
 		checksums = append(checksums, info.Checksum)
 	}
 	return checksums
+}
+
+// checking to see if it terminated abnormally and if so, returning what command is was previously
+func CheckFlagAndState(name string) (bool, string) {
+	infos, err := readJsonFile(getJsonFilePath())
+	if err != nil {
+		fmt.Printf("failed to read json file at checkflag func")
+	}
+	flag := false
+	for _, info := range infos {
+		if info.Flag {
+			return flag, info.State
+		}
+	}
+	return flag, ""
+}
+
+// updating distributedfile check flag after uploading, downloading or removing
+func UpdateDistributedFileCheckFlag(originalFileName string, distributedFileName string, newCheck bool) error {
+	jsonFileMutex.Lock()
+
+	jsonFilePath := getJsonFilePath()
+
+	files, err := readJsonFile(jsonFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read JSON file : %v\n", err)
+	}
+
+	updated := false
+
+	for i, file := range files {
+		if file.FileName == originalFileName {
+			for k, disInfo := range file.DistributedFileInfos {
+				if disInfo.DistributedFile == distributedFileName {
+					files[i].DistributedFileInfos[k].Check = newCheck
+					updated = true
+					break
+				}
+			}
+		}
+	}
+
+	if !updated {
+		return fmt.Errorf("failed to reset flag: original file '%s' not found", originalFileName)
+	}
+
+	err = writeJsonFile(jsonFilePath, files)
+	if err != nil {
+		return fmt.Errorf("failed to write updated JSON: %v", err)
+	}
+
+	jsonFileMutex.Unlock()
+	return nil
+}
+
+// resetting distributedfile check flag after finishing operation
+func ResetDistributedFileCheckFlag(originalFileName string) error {
+	jsonFileMutex.Lock()
+
+	jsonFilePath := getJsonFilePath()
+
+	files, err := readJsonFile(jsonFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read JSON file: %v", err)
+	}
+
+	updated := false
+
+	for i, file := range files {
+		if file.FileName == originalFileName {
+			for k := range file.DistributedFileInfos {
+				files[i].DistributedFileInfos[k].Check = false
+			}
+			updated = true
+			break
+		}
+	}
+
+	if !updated {
+		return fmt.Errorf("failed to reset flag: original file '%s' not found", originalFileName)
+	}
+
+	if err := writeJsonFile(jsonFilePath, files); err != nil {
+		return fmt.Errorf("failed to write updated JSON: %v", err)
+	}
+
+	jsonFileMutex.Unlock()
+	return nil
 }
