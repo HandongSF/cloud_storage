@@ -60,7 +60,7 @@ func CalculateHash(name string) (string, error) {
 
 }
 
-func getShardPath() string {
+func GetShardPath() string {
 	path := GetRcloneDirPath()
 	return filepath.Join(path, "shard")
 }
