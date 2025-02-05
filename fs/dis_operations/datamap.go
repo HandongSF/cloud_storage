@@ -248,7 +248,7 @@ func CheckFlagAndState() (bool, string) {
 
 // Updating file flag to true.
 // this function is used when downloading or deleting a file.
-func UpdateFileFlag(originalFileName string) error {
+func UpdateFileFlag(originalFileName string, state string) error {
 	jsonFileMutex.Lock()
 
 	jsonFilePath := getJsonFilePath()
@@ -262,6 +262,7 @@ func UpdateFileFlag(originalFileName string) error {
 	for i, file := range files {
 		if file.FileName == originalFileName {
 			files[i].Flag = true
+			files[i].State = state
 			updated = true
 		}
 	}
