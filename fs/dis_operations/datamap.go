@@ -232,7 +232,7 @@ func GetChecksumList(name string) (checksums []string) {
 }
 
 // checking to see if it terminated abnormally and if so, returning what command is was previously
-func CheckFlagAndState() (bool, string) {
+func CheckFlagAndState() (bool, string, string) {
 	infos, err := readJsonFile(getJsonFilePath())
 	if err != nil {
 		fmt.Printf("failed to read json file at checkflag func")
@@ -240,10 +240,10 @@ func CheckFlagAndState() (bool, string) {
 	flag := false
 	for _, info := range infos {
 		if info.Flag {
-			return info.Flag, info.State
+			return info.Flag, info.State, info.FileName
 		}
 	}
-	return flag, ""
+	return flag, "", ""
 }
 
 // Updating file flag to true.
@@ -351,4 +351,64 @@ func ResetCheckFlag(originalFileName string) error {
 
 	jsonFileMutex.Unlock()
 	return nil
+}
+
+// input으로 originalName과 hashedFileName []string을 넘겨주면 originalFileName []string넘겨주는 함수
+func GetOriginalFileNameList(originalFileName string, hashedFileNameList []string) ([]string, error) {
+	files, err := readJsonFile(getJsonFilePath())
+	if err != nil {
+		return nil, fmt.Errorf("failed to read JSON file: %v", err)
+	}
+
+	var targetFile *FileInfo
+	for i, file := range files {
+		if file.FileName == originalFileName {
+			targetFile = &files[i]
+			break
+		}
+	}
+
+	if targetFile == nil {
+		return nil, fmt.Errorf("original file '%s' not found", originalFileName)
+	}
+
+	hashToDistributed := make(map[string]string)
+	for _, dFile := range targetFile.DistributedFileInfos {
+		calhash, err := CalculateHash(dFile.DistributedFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to calculate hash for %q: %v", dFile.DistributedFile, err)
+		}
+		hashToDistributed[calhash] = dFile.DistributedFile
+	}
+
+	var result []string
+	for _, hashVal := range hashedFileNameList {
+		if distributedName, ok := hashToDistributed[hashVal]; ok {
+			result = append(result, distributedName)
+		}
+	}
+
+	return result, nil
+
+}
+
+// remove하다 멈췄을 때 어떤 파일을 마저 지워야하는지 알려주는 함수
+func RemoveUncompletedFile(originalFileName string) ([]string, error) {
+	files, err := readJsonFile(getJsonFilePath())
+	if err != nil {
+		return nil, fmt.Errorf("failed to read JSON file: %v", err)
+	}
+
+	for _, file := range files {
+		if file.FileName == originalFileName {
+			var uncompleted []string
+			for _, dFile := range file.DistributedFileInfos {
+				if !dFile.Check {
+					uncompleted = append(uncompleted, dFile.DistributedFile)
+				}
+			}
+			return uncompleted, nil
+		}
+	}
+	return nil, fmt.Errorf("original file '%s' not found", originalFileName)
 }
