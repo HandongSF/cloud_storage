@@ -232,7 +232,7 @@ func GetChecksumList(name string) (checksums []string) {
 }
 
 // checking to see if it terminated abnormally and if so, returning what command is was previously
-func CheckFlagAndState(name string) (bool, string) {
+func CheckFlagAndState() (bool, string) {
 	infos, err := readJsonFile(getJsonFilePath())
 	if err != nil {
 		fmt.Printf("failed to read json file at checkflag func")
@@ -244,6 +244,38 @@ func CheckFlagAndState(name string) (bool, string) {
 		}
 	}
 	return flag, ""
+}
+
+// Updating file flag to true.
+// this function is used when downloading or deleting a file.
+func UpdateFileFlag(originalFileName string) error {
+	jsonFileMutex.Lock()
+
+	jsonFilePath := getJsonFilePath()
+
+	files, err := readJsonFile(jsonFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read JSON file: %v", err)
+	}
+
+	updated := false
+	for i, file := range files {
+		if file.FileName == originalFileName {
+			files[i].Flag = true
+			updated = true
+		}
+	}
+
+	if !updated {
+		return fmt.Errorf("file '%s' not found", originalFileName)
+	}
+
+	if err := writeJsonFile(jsonFilePath, files); err != nil {
+		return fmt.Errorf("failed to write updated JSON: %v", err)
+	}
+
+	jsonFileMutex.Unlock()
+	return nil
 }
 
 // updating distributedfile check flag after uploading, downloading or removing
@@ -284,8 +316,8 @@ func UpdateDistributedFileCheckFlag(originalFileName string, distributedFileName
 	return nil
 }
 
-// resetting distributedfile check flag after finishing operation
-func ResetDistributedFileCheckFlag(originalFileName string) error {
+// resetting file check flag after finishing operation
+func ResetCheckFlag(originalFileName string) error {
 	jsonFileMutex.Lock()
 
 	jsonFilePath := getJsonFilePath()
@@ -299,6 +331,7 @@ func ResetDistributedFileCheckFlag(originalFileName string) error {
 
 	for i, file := range files {
 		if file.FileName == originalFileName {
+			files[i].Flag = false
 			for k := range file.DistributedFileInfos {
 				files[i].DistributedFileInfos[k].Check = false
 			}
