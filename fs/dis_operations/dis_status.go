@@ -17,7 +17,7 @@ func CheckState() bool {
 	if flag == false {
 		return false
 	}
-	fmt.Printf("이전에 중단된 작업이 있습니다: %s - %s", state, origin_name)
+	fmt.Printf("이전에 중단된 작업이 있습니다: %s - %s\n", state, origin_name)
 	return true
 
 }
