@@ -41,3 +41,7 @@ func DoOverwrite() bool {
 func DoRemove() bool {
 	return GetUserConfirmation("Do you want to remove the file?", []string{"yYes remove this file", "nNo keep the file"}, 0)
 }
+
+func DoReUpload(fileName string) bool {
+	return GetUserConfirmation("Do you want to reupload the "+fileName+" ?", []string{"yYes reupload the file", "nNo remove the file"}, 0)
+}
