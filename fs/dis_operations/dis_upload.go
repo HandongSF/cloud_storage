@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/rclone/rclone/cmd"
 	"github.com/rclone/rclone/fs"
@@ -18,99 +17,136 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func Dis_Upload(args []string) (err error) {
-	// Check if file exists
+func Dis_Upload(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("missing file argument")
+	}
+
 	absolutePath, err := dis_init(args[0])
 	if err != nil {
 		return err
 	}
 
-	// Try to get File
 	isDuplicate, err := DoesFileStructExist(args[0])
 	if err != nil {
 		return err
 	}
 
-	if isDuplicate {
-		result := ShowDescription(args[0])
-		if !result {
-			return nil
-		}
+	if isDuplicate && !ShowDescription(args[0]) {
+		return nil
 	}
 
-	isStopped := CheckState()
+	originalFileName := filepath.Base(args[0])
 	var distributedFileArray []DistributedFile
-	originalFilaName := filepath.Base(args[0])
-	var answer bool
-	// true일 경우
-	if isStopped {
-		answer = DoReUpload(originalFilaName)
-	}
+	hashedNamesMap := make(map[string]string)
 
-	if isStopped && answer {
-		//reupload면 distribution파일을 가지고 와서 나머지 명령 수행..?
-		distributedFiles, err := GetDistributedFileStruct(originalFilaName)
-		for _, Dfile := range distributedFiles {
-			if !Dfile.Check {
-				distributedFileArray = append(distributedFileArray, Dfile)
+	if CheckState() {
+		if DoReUpload(originalFileName) {
+			// Upload only non-uploaded
+			tempDistributedFileArray, err := GetDistributedFileStruct(originalFileName)
+			if err != nil {
+				return err
 			}
-		}
 
-		if err != nil {
-			return err
+			for _, dFile := range tempDistributedFileArray {
+				if !dFile.Check {
+					distributedFileArray = append(distributedFileArray, dFile)
+					hashVal, err := CalculateHash(dFile.DistributedFile)
+					if err != nil {
+						return err
+					}
+					hashedNamesMap[dFile.DistributedFile] = hashVal
+				}
+			}
+
+		} else {
+			// Erase All Files
+			return fmt.Errorf("upload process canceled")
 		}
 	} else {
-		dis_names, checksums, shardSize, padding := reedsolomon.DoEncode(absolutePath)
-
-		remotes := config.GetRemotes()
-		rr_counter := 0 // Round Robin
-
-		err = MakeDistributionDir(remotes)
-		if err != nil {
-			return err
-		}
-
-		// get Distributed info	해야함
-		for idx, source := range dis_names {
-			fileName := filepath.Base(source)
-
-			// Get the distributed info
-			distributionFile, err := GetDistributedInfo(fileName, Remote{remotes[rr_counter].Name, remotes[rr_counter].Type}, checksums[idx])
-			if err != nil {
-				return fmt.Errorf("error in GetDistributedInfo for %s: %w", fileName, err)
-			}
-
-			distributedFileArray = append(distributedFileArray, distributionFile)
-
-			rr_counter = (rr_counter + 1) % len(remotes)
-		}
-
-		// Get the full path for the original file
-		originalFileFullPath, err := getAbsolutePath(args[0])
-		if err != nil {
-			return err
-		}
-
-		err = MakeDataMap(originalFileFullPath, distributedFileArray, shardSize, padding)
+		// Upload all
+		hashedNamesMap, distributedFileArray, err = prepareUpload(originalFileName, absolutePath)
 		if err != nil {
 			return err
 		}
 	}
 
-	//for debug
-	// for _, each := range checksums {
-	// 	fmt.Printf("checksum: %s\n", each)
-	// }
+	if err := startUploadFileGoroutine(originalFileName, hashedNamesMap, distributedFileArray); err != nil {
+		return err
+	}
 
-	// fmt.Printf("%d\n", padding)
+	if err := ResetCheckFlag(originalFileName); err != nil {
+		return err
+	}
 
+	fmt.Println("Completed Dis_Upload!")
+	return nil
+}
+
+func createHashNames(distributedFileArray []DistributedFile) (hashNameMap map[string]string, errors []error) {
+	hashNameMap = make(map[string]string)
+	var errs []error
+	for _, DFile := range distributedFileArray {
+		hashedFileName, err := ConvertFileNameForUP(DFile.DistributedFile)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("failed to convert file name %v", err))
+			continue // Skip this iteration on error
+		}
+
+		hashNameMap[DFile.DistributedFile] = hashedFileName
+	}
+	return hashNameMap, errs
+}
+
+func prepareUpload(fileName, absolutePath string) (hashNameMap map[string]string, distributedFileInfos []DistributedFile, err error) {
+	dis_names, checksums, shardSize, padding := reedsolomon.DoEncode(absolutePath)
+
+	remotes := config.GetRemotes()
+	rr_counter := 0 // Round Robin
+
+	err = MakeDistributionDir(remotes)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// get Distributed info	해야함
+	for idx, source := range dis_names {
+		dis_fileName := filepath.Base(source)
+
+		// Get the distributed info
+		distributionFile, err := GetDistributedInfo(dis_fileName, Remote{remotes[rr_counter].Name, remotes[rr_counter].Type}, checksums[idx])
+		if err != nil {
+			return nil, nil, fmt.Errorf("error in GetDistributedInfo for %s: %w", dis_fileName, err)
+		}
+
+		distributedFileInfos = append(distributedFileInfos, distributionFile)
+
+		rr_counter = (rr_counter + 1) % len(remotes)
+	}
+
+	hashNameMap, errs := createHashNames(distributedFileInfos)
+	if len(errs) > 0 {
+		return nil, nil, fmt.Errorf("errors occurred during hashing: %v", errs)
+	}
+
+	// Get the full path for the original file
+	originalFileFullPath, err := getAbsolutePath(fileName)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	err = MakeDataMap(originalFileFullPath, distributedFileInfos, shardSize, padding)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return hashNameMap, distributedFileInfos, nil
+}
+
+func startUploadFileGoroutine(originalFileName string, hashedFileNameMap map[string]string, distributedFileArray []DistributedFile) (err error) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	var errs []error
-
-	start := time.Now()
-	//datamap에서 얻은 정보를 바탕으로 for문 돌림
-	//for(idx, dest from DisInfo, source -> fileName,  )
 	dir := GetShardPath()
 
 	for _, shardInfo := range distributedFileArray {
@@ -119,14 +155,9 @@ func Dis_Upload(args []string) (err error) {
 		go func(shardInfo DistributedFile) {
 			defer wg.Done()
 			dest := fmt.Sprintf("%s:%s", shardInfo.Remote.Name, remoteDirectory)
-			fmt.Printf("Uploading file %s to %s\n", shardInfo.DistributedFile, dest)
+			fmt.Printf("Uploading file %s to %s\n", hashedFileNameMap[shardInfo.DistributedFile], dest)
 
-			hashedFileName, err := ConvertFileNameForUP(shardInfo.DistributedFile)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("failed to converting file name %v", err))
-			}
-
-			source := filepath.Join(dir, hashedFileName)
+			source := filepath.Join(dir, hashedFileNameMap[shardInfo.DistributedFile])
 
 			err = remoteCallCopy([]string{source, dest})
 			if err != nil {
@@ -134,14 +165,14 @@ func Dis_Upload(args []string) (err error) {
 				return
 			}
 
-			err = UpdateDistributedFileCheckFlag(originalFilaName, shardInfo.DistributedFile, true)
+			err = UpdateDistributedFileCheckFlag(originalFileName, shardInfo.DistributedFile, true)
 			if err != nil {
 				fmt.Printf("UpdateDistributedFileCheckFlag 에러 : %v\n", err)
 			}
 
 			mu.Lock()
 			// Erase Temp Shard
-			reedsolomon.DeleteShardWithFileNames([]string{hashedFileName})
+			reedsolomon.DeleteShardWithFileNames([]string{hashedFileNameMap[shardInfo.DistributedFile]})
 			mu.Unlock()
 
 		}(shardInfo)
@@ -149,19 +180,10 @@ func Dis_Upload(args []string) (err error) {
 
 	wg.Wait()
 
-	err = ResetCheckFlag(originalFilaName)
-	if err != nil {
-		return err
-	}
-
-	elapsed := time.Since(start)
-	fmt.Printf("Time taken for dis_uplaod: %s\n", elapsed)
-
 	if len(errs) > 0 {
 		return fmt.Errorf("errors occurred: %v", errs)
 	}
 
-	fmt.Printf("Completed Dis_Upload!\n")
 	return nil
 }
 
