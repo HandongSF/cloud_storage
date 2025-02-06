@@ -47,7 +47,8 @@ func Dis_Download(args []string) (err error) {
 	for _, disFileStruct := range distributedFileInfos {
 		hashedFileName, err := CalculateHash(disFileStruct.DistributedFile)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("error in CalculateHash: %v", err))
+			// Skip this file if hash calculation fails
+			continue
 		}
 		source := fmt.Sprintf("%s:%s/%s", disFileStruct.Remote.Name, remoteDirectory, hashedFileName)
 		fmt.Printf("Downloading shard %s to %s of size \n", source, shardDir)
@@ -56,27 +57,27 @@ func Dis_Download(args []string) (err error) {
 		go func(source, shardDir, hashedFileName, originalFileName string) {
 			defer wg.Done()
 
-			var errOccurred bool
+			downloadedFilePath := path.Join(shardDir, hashedFileName)
 
 			if err := remoteCallCopyforDown([]string{source, shardDir}); err != nil {
-				mu.Lock()
-				errs = append(errs, fmt.Errorf("error in remoteCallCopy for file %s: %v", source, err))
-				mu.Unlock()
-				errOccurred = true
+				// Skip silently if download fails
+				return
+			}
+
+			// Check if the file exists before renaming
+			if _, err := os.Stat(downloadedFilePath); os.IsNotExist(err) {
+				// Skip silently if the file is not found
+				return
 			}
 
 			if err := ConvertFileNameForDo(hashedFileName, originalFileName); err != nil {
-				mu.Lock()
-				errs = append(errs, fmt.Errorf("error in convertFileNameFordo: %v", err))
-				mu.Unlock()
-				errOccurred = true
+				// Skip silently if renaming/conversion fails
+				return
 			}
 
-			if !errOccurred {
-				mu.Lock()
-				fileNames = append(fileNames, originalFileName)
-				mu.Unlock()
-			}
+			mu.Lock()
+			fileNames = append(fileNames, originalFileName)
+			mu.Unlock()
 
 		}(source, shardDir, hashedFileName, disFileStruct.DistributedFile)
 	}
@@ -101,14 +102,9 @@ func Dis_Download(args []string) (err error) {
 		return err
 	}
 
-	disFileInfos, err := GetDistributedFileStruct(args[0])
-	if err != nil {
-		return err
-	}
-
 	var checksums []string
 
-	for _, each := range disFileInfos {
+	for _, each := range distributedFileInfos {
 		checksums = append(checksums, each.Checksum)
 	}
 
