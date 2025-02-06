@@ -17,9 +17,9 @@ import (
 var jsonFileMutex sync.Mutex
 
 // making distributed file info
-func GetDistributedInfo(fileName string, filePath string, remote Remote, checksum string) (DistributedFile, error) {
-	if filePath == "" {
-		return DistributedFile{}, errors.New("filePath cannot be empty")
+func GetDistributedInfo(fileName string, remote Remote, checksum string) (DistributedFile, error) {
+	if fileName == "" {
+		return DistributedFile{}, errors.New("fileName cannot be empty")
 	}
 
 	return DistributedFile{
