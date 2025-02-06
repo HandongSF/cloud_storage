@@ -49,6 +49,9 @@ func Dis_rm(arg []string) (err error) {
 					if err := remoteCallDeleteFile([]string{remotePath}); err != nil {
 						errCh <- fmt.Errorf("failed to delete %s on remote %s: %w", info.DistributedFile, info.Remote.Name, err)
 					}
+
+					// 삭제했다면 플래그 업데이트
+					UpdateDistributedFileCheckFlag(arg[0], info.DistributedFile, true)
 				}(info)
 			}
 
@@ -71,6 +74,9 @@ func Dis_rm(arg []string) (err error) {
 			if err != nil {
 				return fmt.Errorf("Failed to remove file from metadata: %v", err)
 			}
+
+			// 모든 것이 성공했다면 flag 초기화
+			ResetCheckFlag(arg[0])
 
 			fmt.Printf("Successfully deleted all parts of %s and updated metadata.\n", arg[0])
 

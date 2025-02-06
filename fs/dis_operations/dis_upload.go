@@ -38,99 +38,121 @@ func Dis_Upload(args []string) (err error) {
 		}
 	}
 
-	dis_names, checksums, shardSize, padding := reedsolomon.DoEncode(absolutePath)
+	isStopped := CheckState()
+	var distributedFileArray []DistributedFile
+	originalFilaName := filepath.Base(args[0])
+	var answer bool
+	// true일 경우
+	if isStopped {
+		answer = DoReUpload(originalFilaName)
+	}
+
+	if isStopped && answer {
+		//reupload면 distribution파일을 가지고 와서 나머지 명령 수행..?
+		distributedFileArray, err = GetDistributedFileStruct(originalFilaName)
+		if err != nil {
+			return err
+		}
+	} else {
+		dis_names, checksums, shardSize, padding := reedsolomon.DoEncode(absolutePath)
+
+		remotes := config.GetRemotes()
+		rr_counter := 0 // Round Robin
+
+		err = MakeDistributionDir(remotes)
+		if err != nil {
+			return err
+		}
+
+		// get Distributed info	해야함
+		for idx, source := range dis_names {
+			fileName := filepath.Base(source)
+
+			// Get the distributed info
+			distributionFile, err := GetDistributedInfo(fileName, Remote{remotes[rr_counter].Name, remotes[rr_counter].Type}, checksums[idx])
+			if err != nil {
+				return fmt.Errorf("error in GetDistributedInfo for %s: %w", fileName, err)
+			}
+
+			distributedFileArray = append(distributedFileArray, distributionFile)
+
+			rr_counter = (rr_counter + 1) % len(remotes)
+		}
+
+		// Get the full path for the original file
+		originalFileFullPath, err := getAbsolutePath(args[0])
+		if err != nil {
+			return err
+		}
+
+		err = MakeDataMap(originalFileFullPath, distributedFileArray, shardSize, padding)
+		if err != nil {
+			return err
+		}
+	}
 
 	//for debug
-	for _, each := range checksums {
-		fmt.Printf("checksum: %s\n", each)
-	}
+	// for _, each := range checksums {
+	// 	fmt.Printf("checksum: %s\n", each)
+	// }
 
-	fmt.Printf("%d\n", padding)
-	remotes := config.GetRemotes()
-	distributedFileArray := make([]DistributedFile, len(dis_names))
-	rr_counter := 0 // Round Robin
+	// fmt.Printf("%d\n", padding)
 
-	err = MakeDistributionDir(remotes)
-	if err != nil {
-		return err
-	}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	var errs []error
 
 	start := time.Now()
+	//datamap에서 얻은 정보를 바탕으로 for문 돌림
+	//for(idx, dest from DisInfo, source -> fileName,  )
+	dir := GetShardPath()
 
-	for i, source := range dis_names {
-		// Prepare destination for the file upload
-		dest := fmt.Sprintf("%s:%s", remotes[rr_counter].Name, remoteDirectory)
-		fmt.Printf("Uploading file %s to %s of size %d\n", source, dest, shardSize)
-
+	for _, shardInfo := range distributedFileArray {
 		wg.Add(1)
 
-		go func(i, rr int, source string, dest string) {
+		go func(shardInfo DistributedFile) {
 			defer wg.Done()
+			dest := fmt.Sprintf("%s:%s", shardInfo.Remote.Name, remoteDirectory)
+			fmt.Printf("Uploading file %s to %s\n", shardInfo.DistributedFile, dest)
 
-			fileName := filepath.Base(source)
-			dir := filepath.Dir(source)
-
-			hashedFileName, err := ConvertFileNameForUP(fileName)
+			hashedFileName, err := ConvertFileNameForUP(shardInfo.DistributedFile)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("failed to converting file name %v", err))
 			}
-			source = filepath.Join(dir, hashedFileName)
 
-			// Perform the upload (Via API Call)
+			source := filepath.Join(dir, hashedFileName)
+
 			err = remoteCallCopy([]string{source, dest})
 			if err != nil {
 				errs = append(errs, fmt.Errorf("error in remoteCallCopy for file %s: %w", source, err))
 				return
 			}
 
-			// Get the full path of the shard
-			// shardFullPath, err := GetFullPath(source)
+			err = UpdateDistributedFileCheckFlag(originalFilaName, shardInfo.DistributedFile, true)
 			if err != nil {
-				errs = append(errs, fmt.Errorf("error getting full path for %s: %w", source, err))
-				return
-			}
-
-			// Get the distributed info for the shard
-			distributionFile, err := GetDistributedInfo(fileName, source, Remote{remotes[rr].Name, remotes[rr].Type}, checksums[i])
-			if err != nil {
-				errs = append(errs, fmt.Errorf("error in GetDistributedInfo for %s: %w", source, err))
-				return
+				fmt.Printf("UpdateDistributedFileCheckFlag 에러 : %v\n", err)
 			}
 
 			mu.Lock()
 			// Erase Temp Shard
 			reedsolomon.DeleteShardWithFileNames([]string{hashedFileName})
-			distributedFileArray[i] = distributionFile
 			mu.Unlock()
-		}(i, rr_counter, source, dest)
 
-		mu.Lock()
-		rr_counter = (rr_counter + 1) % len(remotes)
-		mu.Unlock()
+		}(shardInfo)
 	}
 
 	wg.Wait()
+
+	err = ResetCheckFlag(originalFilaName)
+	if err != nil {
+		return err
+	}
 
 	elapsed := time.Since(start)
 	fmt.Printf("Time taken for dis_uplaod: %s\n", elapsed)
 
 	if len(errs) > 0 {
 		return fmt.Errorf("errors occurred: %v", errs)
-	}
-
-	// Get the full path for the original file
-	originalFileFullPath, err := getAbsolutePath(args[0])
-	if err != nil {
-		return err
-	}
-
-	// Make the data map using the distributed files
-	err = MakeDataMap(originalFileFullPath, distributedFileArray, padding)
-	if err != nil {
-		return err
 	}
 
 	fmt.Printf("Completed Dis_Upload!\n")

@@ -14,7 +14,7 @@ func ConvertFileNameForUP(name string) (string, error) {
 		fmt.Errorf("failed to calculate hash: %v", err)
 	}
 
-	dir := getShardPath()
+	dir := GetShardPath()
 	hashedFilePath := filepath.Join(dir, hashFileName)
 	originalFilePath := filepath.Join(dir, name)
 
@@ -28,7 +28,7 @@ func ConvertFileNameForUP(name string) (string, error) {
 }
 
 func ConvertFileNameForDo(hashedName string, originalName string) error {
-	dir := getShardPath()
+	dir := GetShardPath()
 	hashedFilePath := filepath.Join(dir, hashedName)
 	originalFilePath := filepath.Join(dir, originalName)
 
@@ -60,7 +60,7 @@ func CalculateHash(name string) (string, error) {
 
 }
 
-func getShardPath() string {
+func GetShardPath() string {
 	path := GetRcloneDirPath()
 	return filepath.Join(path, "shard")
 }
