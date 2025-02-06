@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/rclone/rclone/fs/config"
 	"github.com/rclone/rclone/reedsolomon"
@@ -42,7 +43,7 @@ func ReStartFunction() {
 			reDisDownload()
 		}
 		if state == "rm" {
-			reDisRm()
+			reDisRm(origin_name)
 		}
 	}
 
@@ -53,7 +54,7 @@ func ReStartFunction() {
 		reDisDownload()
 	}
 	if state == "rm" {
-		reDisRm()
+		reDisRm(origin_name)
 	}
 
 	return
@@ -159,9 +160,68 @@ func sendHashName() []string {
 }
 
 func reDisDownload() {
+
 	fmt.Println("구현 미완성 - reDownload")
 }
 
-func reDisRm() {
-	fmt.Println("구현 미완성 - reRm")
+func reDisRm(origin_name string) {
+
+	// 삭제해야 할 파일이름들 불러오기
+	rmFiles, err := RemoveUncompletedFile(origin_name)
+	if err != nil {
+		fmt.Println("RemoveUncompletedFile error: %v", err)
+		return
+	}
+
+	// 파일들 삭제
+	start := time.Now()
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(rmFiles))
+
+	remoteDirectory := "Distribution"
+	for _, fileName := range rmFiles {
+		wg.Add(1)
+		go func(fileName string) {
+			defer wg.Done()
+
+			hashedFileName, err := CalculateHash(fileName)
+			if err != nil {
+				errCh <- fmt.Errorf("failed to calculate hash %v", err)
+			}
+			remotePath := fmt.Sprintf("%s:%s/%s", fileName, remoteDirectory, hashedFileName)
+			fmt.Printf("Deleting file on remote: %s\n", remotePath)
+
+			if err := remoteCallDeleteFile([]string{remotePath}); err != nil {
+				errCh <- fmt.Errorf("failed to delete %s : %w", fileName, err)
+			}
+
+			// 삭제했다면 플래그 업데이트
+			UpdateDistributedFileCheckFlag(origin_name, fileName, true)
+		}(fileName)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	// 모든 삭제 작업에 대한 오류를 확인.
+	var deleteErrs []error
+	for err := range errCh {
+		deleteErrs = append(deleteErrs, err)
+	}
+
+	// 삭제 중 오류가 하나라도 발생했다면, 오류 메시지를 출력.
+	if len(deleteErrs) > 0 {
+		fmt.Printf("Errors occurred while deleting files: %v\n", deleteErrs)
+		return
+	}
+
+	// 모든 것이 성공했다면 flag 초기화
+	ResetCheckFlag(origin_name)
+
+	elapsed := time.Since(start)
+	fmt.Printf("Time taken for dis_rm: %s\n", elapsed)
+
+	fmt.Printf("Successfully deleted all parts of %s and update metadata\n", origin_name)
+
+	return
 }
