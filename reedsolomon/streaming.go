@@ -88,7 +88,7 @@ func DeleteShardDir() {
 	}
 }
 
-func DoEncode(fname string) ([]string, []string, int, int64) {
+func DoEncode(fname string) ([]string, []string, int64, int64) {
 	var paths []string
 	var checksums []string
 	var padding int64
@@ -179,7 +179,7 @@ func DoEncode(fname string) ([]string, []string, int, int64) {
 	fInfo, err := fileShard.Stat()
 	checkErr(err)
 
-	sizePerShard := int(fInfo.Size())
+	sizePerShard := int64(fInfo.Size())
 
 	fileShard.Close()
 

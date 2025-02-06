@@ -50,7 +50,7 @@ func Dis_Download(args []string) (err error) {
 			errs = append(errs, fmt.Errorf("error in CalculateHash: %v", err))
 		}
 		source := fmt.Sprintf("%s:%s/%s", disFileStruct.Remote.Name, remoteDirectory, hashedFileName)
-		fmt.Printf("Downloading shard %s to %s of size %d\n", source, shardDir, disFileStruct.DisFileSize)
+		fmt.Printf("Downloading shard %s to %s of size \n", source, shardDir)
 
 		wg.Add(1)
 		go func(source, shardDir, hashedFileName, originalFileName string) {

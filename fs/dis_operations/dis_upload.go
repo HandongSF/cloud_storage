@@ -38,7 +38,15 @@ func Dis_Upload(args []string) (err error) {
 		}
 	}
 
+	isStopped := CheckState()
+	if isStopped == true {
+		ReStartFunction()
+		return nil
+	}
+
 	dis_names, checksums, shardSize, padding := reedsolomon.DoEncode(absolutePath)
+
+	// get Distributed info	해야함
 
 	//for debug
 	for _, each := range checksums {
@@ -93,6 +101,11 @@ func Dis_Upload(args []string) (err error) {
 				return
 			}
 
+			err = UpdateDistributedFileCheckFlag(args[0], fileName, true)
+			if err != nil {
+				fmt.Printf("UpdateDistributedFileCheckFlag 에러 : %v\n", err)
+			}
+
 			// Get the distributed info for the shard
 			distributionFile, err := GetDistributedInfo(fileName, source, Remote{remotes[rr].Name, remotes[rr].Type}, checksums[i])
 			if err != nil {
@@ -112,6 +125,8 @@ func Dis_Upload(args []string) (err error) {
 		mu.Unlock()
 	}
 
+	err = ResetCheckFlag(args[0])
+
 	wg.Wait()
 
 	elapsed := time.Since(start)
@@ -128,7 +143,7 @@ func Dis_Upload(args []string) (err error) {
 	}
 
 	// Make the data map using the distributed files
-	err = MakeDataMap(originalFileFullPath, distributedFileArray, padding)
+	err = MakeDataMap(originalFileFullPath, distributedFileArray, shardSize, padding)
 	if err != nil {
 		return err
 	}
