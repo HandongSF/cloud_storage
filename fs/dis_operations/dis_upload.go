@@ -49,7 +49,13 @@ func Dis_Upload(args []string) (err error) {
 
 	if isStopped && answer {
 		//reupload면 distribution파일을 가지고 와서 나머지 명령 수행..?
-		distributedFileArray, err = GetDistributedFileStruct(originalFilaName)
+		distributedFiles, err := GetDistributedFileStruct(originalFilaName)
+		for _, Dfile := range distributedFiles {
+			if !Dfile.Check {
+				distributedFileArray = append(distributedFileArray, Dfile)
+			}
+		}
+
 		if err != nil {
 			return err
 		}
