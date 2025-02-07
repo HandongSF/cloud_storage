@@ -17,7 +17,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func Dis_Upload(args []string) error {
+func Dis_Upload(args []string, reSignal bool) error {
 	if len(args) == 0 {
 		return fmt.Errorf("missing file argument")
 	}
@@ -27,44 +27,38 @@ func Dis_Upload(args []string) error {
 		return err
 	}
 
-	isDuplicate, err := DoesFileStructExist(args[0])
-	if err != nil {
-		return err
-	}
-
-	if isDuplicate && !ShowDescription(args[0]) {
-		return nil
-	}
-
 	originalFileName := filepath.Base(args[0])
 	var distributedFileArray []DistributedFile
 	hashedNamesMap := make(map[string]string)
 
-	if CheckState() {
-		if DoReUpload(originalFileName) {
-			// Upload only non-uploaded
-			tempDistributedFileArray, err := GetDistributedFileStruct(originalFileName)
-			if err != nil {
-				return err
-			}
+	if reSignal {
+		tempDistributedFileArray, err := GetDistributedFileStruct(originalFileName)
+		if err != nil {
+			return err
+		}
 
-			for _, dFile := range tempDistributedFileArray {
-				if !dFile.Check {
-					distributedFileArray = append(distributedFileArray, dFile)
-					hashVal, err := CalculateHash(dFile.DistributedFile)
-					if err != nil {
-						return err
-					}
-					hashedNamesMap[dFile.DistributedFile] = hashVal
+		for _, dFile := range tempDistributedFileArray {
+			if !dFile.Check {
+				distributedFileArray = append(distributedFileArray, dFile)
+				hashVal, err := CalculateHash(dFile.DistributedFile)
+				if err != nil {
+					return err
 				}
+				hashedNamesMap[dFile.DistributedFile] = hashVal
 			}
-
-		} else {
-			// Erase All Files
-			return fmt.Errorf("upload process canceled")
 		}
 	} else {
-		// Upload all
+		fmt.Printf("else name : %s\n", args[0])
+		isDuplicate, err := DoesFileStructExist(originalFileName)
+		fmt.Printf("isDuplicate: %t\n", isDuplicate)
+		if err != nil {
+			return err
+		}
+
+		if isDuplicate && !ShowDescription(originalFileName) {
+			return nil
+		}
+
 		hashedNamesMap, distributedFileArray, err = prepareUpload(originalFileName, absolutePath)
 		if err != nil {
 			return err

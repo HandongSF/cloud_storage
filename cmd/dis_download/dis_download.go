@@ -42,7 +42,8 @@ To erase the files, use the dis_rm command instead.
 	Run: func(command *cobra.Command, args []string) {
 		cmd.CheckArgs(2, 2, command, args)
 		cmd.Run(true, true, command, func() error {
-			return dis_operations.Dis_Download(args)
+			dis_operations.CheckState()
+			return dis_operations.Dis_Download(args, false)
 		})
 	},
 }

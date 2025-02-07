@@ -76,9 +76,16 @@ func Dis_rm(arg []string) (err error) {
 			}
 
 			// 모든 것이 성공했다면 flag 초기화
-			ResetCheckFlag(arg[0])
-
-			fmt.Printf("Successfully deleted all parts of %s and updated metadata.\n", arg[0])
+			err = ResetCheckFlag(arg[0])
+			if err == nil {
+				err = RemoveFileFromMetadata(arg[0])
+				if err != nil {
+					return fmt.Errorf("Failed to remove file from metadata: %v", err)
+				}
+				fmt.Printf("Successfully deleted all parts of %s and updated metadata.\n", arg[0])
+			} else {
+				//??
+			}
 
 			return nil
 		}
