@@ -6,7 +6,7 @@ import (
 
 func CheckState() error {
 	flag, state, origin_name := CheckFlagAndState()
-	if flag == false {
+	if !flag {
 		return nil
 	}
 
