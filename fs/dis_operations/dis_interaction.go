@@ -45,3 +45,7 @@ func DoRemove() bool {
 func DoReUpload(fileName string) bool {
 	return GetUserConfirmation("Do you want to reupload the "+fileName+" ?", []string{"yYes reupload the file", "nNo remove the file"}, 0)
 }
+
+func DoReDownload(fileName string) bool {
+	return GetUserConfirmation("Do you want to redownload the "+fileName+" ?", []string{"yYes redownload the file", "nNo remove the file"}, 0)
+}
