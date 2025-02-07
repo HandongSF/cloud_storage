@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func Dis_Download(args []string) (err error) {
+func Dis_Download(args []string, reSignal bool) (err error) {
 	distributedFileNames, err := Dis_ls()
 	if err != nil {
 		return err
