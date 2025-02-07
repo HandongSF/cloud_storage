@@ -41,7 +41,8 @@ If you wish to simply copy the file without any distribution, use the
 	Run: func(command *cobra.Command, args []string) {
 		cmd.CheckArgs(1, 1, command, args)
 		cmd.Run(true, true, command, func() error {
-			return dis_operations.Dis_Upload(args)
+			dis_operations.CheckState()
+			return dis_operations.Dis_Upload(args, false)
 		})
 	},
 }
