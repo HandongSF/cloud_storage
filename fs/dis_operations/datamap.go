@@ -393,7 +393,7 @@ func GetOriginalFileNameList(originalFileName string, hashedFileNameList []strin
 }
 
 // remove하다 멈췄을 때 어떤 파일을 마저 지워야하는지 알려주는 함수
-func RemoveUncompletedFile(originalFileName string) ([]string, error) {
+func GetUncompletedFileInfo(originalFileName string) ([]DistributedFile, error) {
 	files, err := readJsonFile(getJsonFilePath())
 	if err != nil {
 		return nil, fmt.Errorf("failed to read JSON file: %v", err)
@@ -401,10 +401,10 @@ func RemoveUncompletedFile(originalFileName string) ([]string, error) {
 
 	for _, file := range files {
 		if file.FileName == originalFileName {
-			var uncompleted []string
+			var uncompleted []DistributedFile
 			for _, dFile := range file.DistributedFileInfos {
 				if !dFile.Check {
-					uncompleted = append(uncompleted, dFile.DistributedFile)
+					uncompleted = append(uncompleted, dFile)
 				}
 			}
 			return uncompleted, nil
