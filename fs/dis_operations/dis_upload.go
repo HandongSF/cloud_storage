@@ -18,10 +18,6 @@ import (
 )
 
 func Dis_Upload(args []string, reSignal bool) error {
-	if len(args) == 0 {
-		return fmt.Errorf("missing file argument")
-	}
-
 	absolutePath, err := dis_init(args[0])
 	if err != nil {
 		return err
@@ -177,7 +173,7 @@ func startUploadFileGoroutine(originalFileName string, hashedFileNameMap map[str
 	if len(errs) > 0 {
 		return fmt.Errorf("errors occurred: %v", errs)
 	}
-
+	fmt.Println("NO errors occured!")
 	return nil
 }
 
