@@ -16,7 +16,7 @@ func Dis_rm(arg []string, reSignal bool) (err error) {
 	fmt.Printf(arg[0] + "\n")
 
 	originalFileName := arg[0]
-	//var distributedFileArray []DistributedFile
+	var distributedFileArray []DistributedFile
 
 	listOfFiles, err := Dis_ls() //Dis_ls로 목록 체크
 	if err != nil {
@@ -27,40 +27,40 @@ func Dis_rm(arg []string, reSignal bool) (err error) {
 
 	// reRm 인 경우
 	if reSignal {
+		distributedFileArray, err = GetUncompletedFileInfo(originalFileName)
 
 	} else { // reRm이 아닌경우
 		for _, name := range listOfFiles {
 			fmt.Printf("name: " + name + " " + arg[0] + "\n")
 			// Dis_ls로 일치하는 이름을 찾았다면
 			if name == arg[0] {
-				distributedFileArray, err := GetDistributedFileStruct(arg[0])
+				distributedFileArray, err = GetDistributedFileStruct(arg[0])
 				if err != nil {
 					return fmt.Errorf("Failed to get Distributed File Info: %v", err)
-				}
-
-				// rm 로직
-				if err := startRmFileGoroutine(originalFileName, distributedFileArray); err != nil {
-					return err
-				}
-
-				elapsed := time.Since(start)
-				fmt.Printf("Time taken for dis_rm: %s\n", elapsed)
-
-				// 모든 것이 성공했다면 flag 초기화
-				err = ResetCheckFlag(arg[0])
-				if err == nil {
-					err = RemoveFileFromMetadata(arg[0])
-					if err != nil {
-						return fmt.Errorf("Failed to remove file from metadata: %v", err)
-					}
-					fmt.Printf("Successfully deleted all parts of %s and updated metadata.\n", arg[0])
-				} else {
-					//??
 				}
 
 				return nil
 			}
 		}
+	}
+	// rm 로직
+	if err := startRmFileGoroutine(originalFileName, distributedFileArray); err != nil {
+		return err
+	}
+
+	elapsed := time.Since(start)
+	fmt.Printf("Time taken for dis_rm: %s\n", elapsed)
+
+	// 모든 것이 성공했다면 flag 초기화
+	err = ResetCheckFlag(arg[0])
+	if err == nil {
+		err = RemoveFileFromMetadata(arg[0])
+		if err != nil {
+			return fmt.Errorf("Failed to remove file from metadata: %v", err)
+		}
+		fmt.Printf("Successfully deleted all parts of %s and updated metadata.\n", arg[0])
+	} else {
+		//??
 	}
 
 	return fmt.Errorf("file %s does not exist on remote.\n", arg[0])

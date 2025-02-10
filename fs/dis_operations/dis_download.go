@@ -112,7 +112,7 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 	if err != nil {
 		result := ShowDescription_RemoveFile(args[0])
 		if result {
-			err = Dis_rm([]string{args[0]})
+			err = Dis_rm([]string{args[0]}, false)
 			if err != nil {
 				return err
 			}

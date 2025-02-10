@@ -46,7 +46,7 @@ func CheckState() error {
 
 func DumpRmState(args []string) (err error) {
 	// Remove shards in remote and info in datamap
-	err = Dis_rm(args)
+	err = Dis_rm(args, true)
 	if err != nil {
 		return err
 	}
@@ -78,7 +78,7 @@ func DumpUploadState(args []string) (err error) {
 	}
 
 	// Remove shards in remote and info in datamap
-	err = Dis_rm(args)
+	err = Dis_rm(args, false)
 	if err != nil {
 		return err
 	}
