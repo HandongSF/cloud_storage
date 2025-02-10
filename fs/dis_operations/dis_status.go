@@ -36,6 +36,7 @@ func CheckState() error {
 		}
 	} else if state == "rm" {
 		//무조건 지우던거 마져 지움
+		fmt.Printf("we will run the 'RM' operation again")
 		return nil
 	}
 
