@@ -58,7 +58,7 @@ func readJsonFile() (map[string]FileInfo, error) {
 	var filesMap map[string]FileInfo
 	decoder := json.NewDecoder(file)
 	err = decoder.Decode(&filesMap)
-	if err != nil && !errors.Is(err, is.EOF) {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("failed to decode JSON: %v", err)
 	}
 	if filesMap == nil {
