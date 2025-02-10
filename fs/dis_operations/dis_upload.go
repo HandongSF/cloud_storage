@@ -92,7 +92,6 @@ func prepareUpload(fileName, absolutePath string) (hashNameMap map[string]string
 	dis_names, checksums, shardSize, padding := reedsolomon.DoEncode(absolutePath)
 
 	remotes := config.GetRemotes()
-	rr_counter := 0 // Round Robin
 
 	err = MakeDistributionDir(remotes)
 	if err != nil {
@@ -103,15 +102,18 @@ func prepareUpload(fileName, absolutePath string) (hashNameMap map[string]string
 	for idx, source := range dis_names {
 		dis_fileName := filepath.Base(source)
 
-		// Get the distributed info
-		distributionFile, err := GetDistributedInfo(dis_fileName, Remote{remotes[rr_counter].Name, remotes[rr_counter].Type}, checksums[idx])
+		remote, err := LoadBalancer_RoundRobin()
 		if err != nil {
-			return nil, nil, fmt.Errorf("error in GetDistributedInfo for %s: %w", dis_fileName, err)
+			return nil, nil, err
+		}
+		// Get the distributed info
+		distributionFile, err := GetDistributedInfo(dis_fileName, Remote{remote.Name, remote.Type}, checksums[idx])
+		if err != nil {
+			return nil, nil, err
 		}
 
 		distributedFileInfos = append(distributedFileInfos, distributionFile)
 
-		rr_counter = (rr_counter + 1) % len(remotes)
 	}
 
 	hashNameMap, errs := createHashNames(distributedFileInfos)
