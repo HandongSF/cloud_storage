@@ -1,6 +1,6 @@
 package dis_operations
 
-import "github.com/rclone/rclone/fs/config"
+import "fmt"
 
 // The Top Data Structure
 type FileInfo struct {
@@ -27,8 +27,12 @@ type Remote struct {
 }
 
 type LoadBalancerInfo struct {
-	RoundRobinCounter       int                   `json:"RoundRobin_Counter"`
-	RemoteConnectionCounter map[config.Remote]int `json:"Remote_Connection_Counter"`
+	RoundRobinCounter       int            `json:"RoundRobin_Counter"`
+	RemoteConnectionCounter map[string]int `json:"Remote_Connection_Counter"`
 }
 
 var remoteDirectory = "Distribution"
+
+func (r Remote) String() string {
+	return fmt.Sprintf("%s|%s", r.Name, r.Type) // Use a separator to avoid conflicts
+}
