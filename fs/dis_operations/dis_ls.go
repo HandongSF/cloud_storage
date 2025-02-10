@@ -17,7 +17,7 @@ func Dis_ls() ([]string, error) {
 	}
 	defer file.Close()
 
-	var data []FileInfo
+	var data map[string]FileInfo
 	decoder := json.NewDecoder(file)
 	err = decoder.Decode(&data)
 	if err != nil {
