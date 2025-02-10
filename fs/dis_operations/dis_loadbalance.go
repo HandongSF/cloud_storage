@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/rclone/rclone/cmd"
@@ -15,28 +15,35 @@ import (
 	"github.com/rclone/rclone/fs/config"
 	"github.com/spf13/cobra"
 )
- 
-func LoadBalancer_RoundRobin() (config.Remote, error) {
+
+func LoadBalancer_RoundRobin() (Remote, error) {
 	jsonFilePath := getLoadBalancerJsonFilePath()
-	existingLBInfo, err := readLoadBalancerJsonFile(jsonFilePath)
+	existingLBInfo, err := readJSON(jsonFilePath)
 	if err != nil {
-		return config.Remote{}, err
+		return Remote{}, err
 	}
 
 	remotes := config.GetRemotes()
-	var remote = remotes[existingLBInfo.RoundRobinCounter%len(remotes)]
+	if len(remotes) == 0 {
+		return Remote{}, fmt.Errorf("no available remotes")
+	}
 
+	// Select a remote using Round Robin
+	selectedRemote := remotes[existingLBInfo.RoundRobinCounter%len(remotes)]
+	selectedRemoteObj := Remote{selectedRemote.Name, selectedRemote.Type}
+
+	// Increment counters
 	IncrementRoundRobinCounter()
-	IncrementRemoteConnectionCounter(remote)
+	IncrementRemoteConnectionCounter(selectedRemoteObj)
 
-	return remote, nil
+	return selectedRemoteObj, nil
 }
 
-func LoadBalancer_LeastConnected() (config.Remote, error) {
+func LoadBalancer_LeastDistributed() (Remote, error) {
 	jsonFilePath := getLoadBalancerJsonFilePath()
-	existingLBInfo, err := readLoadBalancerJsonFile(jsonFilePath)
+	existingLBInfo, err := readJSON(jsonFilePath)
 	if err != nil {
-		return config.Remote{}, err
+		return Remote{}, err
 	}
 
 	remote := getKeyOfSmallestValue(existingLBInfo.RemoteConnectionCounter)
@@ -88,80 +95,125 @@ func LoadBalancer_ResourceBased() (config.Remote, error) {
 }
 
 func IncrementRoundRobinCounter() error {
-	jsonFilePath := getJsonFilePath()
-
-	existingLBInfo, err := readLoadBalancerJsonFile(jsonFilePath)
+	jsonFilePath := getLoadBalancerJsonFilePath()
+	existingLBInfo, err := readJSON(jsonFilePath)
 	if err != nil {
 		return err
 	}
 
-	existingLBInfo.RoundRobinCounter++
+	existingLBInfo.RoundRobinCounter = (existingLBInfo.RoundRobinCounter + 1)
 
-	return writeLoadBalancerJsonFile(jsonFilePath, existingLBInfo)
+	return writeJSON(jsonFilePath, existingLBInfo)
 }
+func IncrementRemoteConnectionCounter(remote Remote) error {
+	jsonFilePath := getLoadBalancerJsonFilePath()
 
-func IncrementRemoteConnectionCounter(remote config.Remote) error {
-	jsonFilePath := getJsonFilePath()
-
-	existingLBInfo, err := readLoadBalancerJsonFile(jsonFilePath)
+	existingLBInfo, err := readJSON(jsonFilePath)
 	if err != nil {
 		return err
 	}
 
 	if existingLBInfo.RemoteConnectionCounter == nil {
-		existingLBInfo.RemoteConnectionCounter = make(map[config.Remote]int)
+		existingLBInfo.RemoteConnectionCounter = make(map[string]int)
 	}
 
-	// Update the counter for the given remote ID
-	existingLBInfo.RemoteConnectionCounter[remote]++
+	// Convert Remote struct to a string key
+	remoteKey := remote.String()
+
+	// Increment the connection counter for the remote
+	existingLBInfo.RemoteConnectionCounter[remoteKey]++
 
 	// Write the updated data back to the file
-	return writeLoadBalancerJsonFile(jsonFilePath, existingLBInfo)
+	return writeJSON(jsonFilePath, existingLBInfo)
 }
 
 func getLoadBalancerJsonFilePath() string {
+	// Get the directory path (you will need to implement GetRcloneDirPath based on your application logic)
 	path := GetRcloneDirPath()
-	return filepath.Join(path, "data", "loadbalancer.json")
+
+	// Construct the file path
+	filePath := filepath.Join(path, "data", "loadbalancer.json")
+
+	// Check if the file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		// Create the directories if they don't exist
+		err := os.MkdirAll(filepath.Dir(filePath), 0755)
+		if err != nil {
+			fmt.Println("Error creating directories:", err)
+			return ""
+		}
+
+		// Create the JSON file
+		file, err := os.Create(filePath)
+		if err != nil {
+			fmt.Println("Error creating file:", err)
+			return ""
+		}
+		defer file.Close()
+
+		// Initialize LoadBalancerInfo with default values
+		lbInfo := LoadBalancerInfo{
+			RoundRobinCounter:       0,
+			RemoteConnectionCounter: make(map[string]int),
+		}
+
+		// Marshal the LoadBalancerInfo struct to JSON format
+		data, err := json.MarshalIndent(lbInfo, "", "  ")
+		if err != nil {
+			fmt.Println("Error marshaling data:", err)
+			return ""
+		}
+
+		// Write the initialized data to the file
+		_, err = file.Write(data)
+		if err != nil {
+			fmt.Println("Error writing to file:", err)
+			return ""
+		}
+	}
+
+	return filePath
 }
 
-func readLoadBalancerJsonFile(filePath string) (LoadBalancerInfo, error) {
-	file, err := os.Open(filePath)
+func readJSON(filename string) (*LoadBalancerInfo, error) {
+	// Open the file
+	file, err := os.Open(filename)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return LoadBalancerInfo{}, nil // Return empty slice if file does not exist
-		}
-		return LoadBalancerInfo{}, fmt.Errorf("failed to open JSON file: %v", err)
+		return nil, err
 	}
 	defer file.Close()
 
-	var info LoadBalancerInfo
-	if err := json.NewDecoder(file).Decode(info); err != nil && !errors.Is(err, io.EOF) {
-		return LoadBalancerInfo{}, fmt.Errorf("failed to decode JSON: %v", err)
+	// Read the file contents
+	var lbInfo LoadBalancerInfo
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&lbInfo)
+	if err != nil {
+		return nil, err
 	}
-	return info, nil
+
+	return &lbInfo, nil
 }
 
-func writeLoadBalancerJsonFile(filePath string, data LoadBalancerInfo) error {
-	if err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm); err != nil {
-		return fmt.Errorf("failed to create directory: %v", err)
-	}
-
-	jsonData, err := json.MarshalIndent(data, "", "  ")
+func writeJSON(filename string, lbInfo *LoadBalancerInfo) error {
+	data, err := json.MarshalIndent(lbInfo, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal JSON: %v", err)
+		return err
 	}
 
-	if err := os.WriteFile(filePath, jsonData, 0644); err != nil {
-		return fmt.Errorf("failed to write JSON file: %v", err)
+	err = os.WriteFile(filename, data, 0644)
+	if err != nil {
+		return err
 	}
+
 	return nil
 }
 
-func getKeyOfSmallestValue(counter map[config.Remote]int) config.Remote {
-	var minKey config.Remote
+func getKeyOfSmallestValue(counter map[string]int) Remote {
+	var minKey string
 	var minValue int
 	firstIteration := true
 
+	// Find the key with the smallest value
 	for key, value := range counter {
 		if firstIteration || value < minValue {
 			minValue = value
@@ -170,7 +222,21 @@ func getKeyOfSmallestValue(counter map[config.Remote]int) config.Remote {
 		}
 	}
 
-	return minKey
+	// Handle empty counter case
+	if minKey == "" {
+		return Remote{} // Return an empty Remote struct if the map is empty
+	}
+
+	// Split the key back into Name and Type
+	parts := strings.Split(minKey, "|")
+	if len(parts) != 2 {
+		return Remote{}
+	}
+
+	return Remote{
+		Name: parts[0],
+		Type: parts[1],
+	}
 }
 
 var aboutCommandDefinitionForRemoteCall = &cobra.Command{
