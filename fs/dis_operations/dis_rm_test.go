@@ -41,7 +41,7 @@ func TestDisrm_Success(t *testing.T) {
 
 	// Test case
 	args := []string{"picture.jpg"}
-	err := Dis_rm(args)
+	err := Dis_rm(args, false)
 
 	// Assertions
 	assert.NoError(t, err, "Expected no error on successful file deletion")
@@ -52,7 +52,7 @@ func TestDisRemove_FileNotFound(t *testing.T) {
 
 	// Test case
 	args := []string{"file4"}
-	err := Dis_rm(args)
+	err := Dis_rm(args, false)
 
 	// Assertions
 	assert.Error(t, err, "Expected an error when file is not found")
@@ -67,7 +67,7 @@ func TestDisRemove_ExecutionError(t *testing.T) {
 
 	// Test case
 	args := []string{"file1"}
-	err := Dis_rm(args)
+	err := Dis_rm(args, false)
 
 	// Assertions
 	assert.Error(t, err, "Expected an error when execution fails")
