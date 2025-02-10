@@ -26,11 +26,17 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 	}
 
 	var fileNames []string
+	var distributedFileInfos []DistributedFile
 
-	// Get Distribution list
-	distributedFileInfos, err := GetDistributedFileStruct(args[0])
-	if err != nil {
-		return err
+	if reSignal {
+		//Get Distribution list(Check 읽어서 false인 것만 들고 오기)
+
+	} else {
+		//state 변경
+		distributedFileInfos, err = GetDistributedFileStruct(args[0])
+		if err != nil {
+			return err
+		}
 	}
 
 	// Get shards  via API call
@@ -78,6 +84,7 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 			mu.Lock()
 			fileNames = append(fileNames, originalFileName)
 			mu.Unlock()
+			//change file check flag to true
 
 		}(source, shardDir, hashedFileName, disFileStruct.DistributedFile)
 	}
@@ -141,6 +148,7 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 	}
 
 	fmt.Printf("File successfully downloaded to %s\n", absolutePath)
+	// change Flag and Check to false
 
 	// Erase Temp Shard
 	reedsolomon.DeleteShardWithFileNames(fileNames)
