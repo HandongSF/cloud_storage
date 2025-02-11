@@ -276,6 +276,7 @@ func UpdateFileFlag(originalFileName string, state string) error {
 // updating distributedfile check flag after uploading, downloading or removing
 func UpdateDistributedFileCheckFlag(originalFileName string, distributedFileName string, newCheck bool) error {
 	jsonFileMutex.Lock()
+	defer jsonFileMutex.Unlock()
 
 	filesMap, err := readJsonFile()
 	if err != nil {
@@ -301,14 +302,15 @@ func UpdateDistributedFileCheckFlag(originalFileName string, distributedFileName
 	if err != nil {
 		return fmt.Errorf("failed to write updated JSON: %v", err)
 	}
+	fmt.Printf("check flag updated!\n")
 
-	jsonFileMutex.Unlock()
 	return nil
 }
 
 // resetting file check flag after finishing operation
 func ResetCheckFlag(originalFileName string) error {
 	jsonFileMutex.Lock()
+	defer jsonFileMutex.Unlock()
 
 	filesMap, err := readJsonFile()
 	if err != nil {
@@ -333,7 +335,6 @@ func ResetCheckFlag(originalFileName string) error {
 		return fmt.Errorf("failed to write updated JSON: %v", err)
 	}
 
-	jsonFileMutex.Unlock()
 	return nil
 }
 
