@@ -31,6 +31,10 @@ func Dis_rm(arg []string, reSignal bool) (err error) {
 		}
 
 	} else { // reRm이 아닌경우
+		err = UpdateFileFlag(originalFileName, "rm")
+		if err != nil {
+			return err
+		}
 		distributedFileArray, err = GetDistributedFileStruct(originalFileName)
 		if err != nil {
 			return err
@@ -54,6 +58,7 @@ func Dis_rm(arg []string, reSignal bool) (err error) {
 			return fmt.Errorf("Failed to remove file from metadata: %v", err)
 		}
 		fmt.Printf("Successfully deleted all parts of %s and updated metadata.\n", arg[0])
+		ResetCheckFlag(originalFileName)
 	} else {
 		//??
 	}
