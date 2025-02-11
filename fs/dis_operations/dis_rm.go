@@ -58,6 +58,7 @@ func Dis_rm(arg []string, reSignal bool) (err error) {
 			return fmt.Errorf("Failed to remove file from metadata: %v", err)
 		}
 		fmt.Printf("Successfully deleted all parts of %s and updated metadata.\n", arg[0])
+		return
 	} else {
 		//??
 	}
