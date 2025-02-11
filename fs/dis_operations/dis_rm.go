@@ -118,11 +118,6 @@ func startRmFileGoroutine(originalFileName string, distributedFileArray []Distri
 		return fmt.Errorf("Errors occurred while deleting files: %v", deleteErrs)
 	}
 
-	err = RemoveFileFromMetadata(originalFileName)
-	if err != nil {
-		return fmt.Errorf("Failed to remove file from metadata: %v", err)
-	}
-
 	return nil
 }
 
