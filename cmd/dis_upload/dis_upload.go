@@ -1,6 +1,7 @@
 package dis_upload
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/rclone/rclone/cmd"
@@ -8,8 +9,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var loadBalancer LoadBalancerFlag
+
 func init() {
 	cmd.Root.AddCommand(commandDefinition)
+	loadBalancer.Value = dis_operations.RoundRobin // Default value
+	commandDefinition.Flags().VarP(&loadBalancer, "loadbalancer", "b", "Load balancing strategy (RoundRobin, LeastConnections)")
 }
 
 var commandDefinition = &cobra.Command{
@@ -41,8 +46,35 @@ If you wish to simply copy the file without any distribution, use the
 	Run: func(command *cobra.Command, args []string) {
 		cmd.CheckArgs(1, 1, command, args)
 		cmd.Run(true, true, command, func() error {
-			dis_operations.CheckState()
-			return dis_operations.Dis_Upload(args, false)
+			if !loadBalancer.Value.IsValid() {
+				return fmt.Errorf("invalid load balancer type: %s (valid: RoundRobin, LeastConnections, Random)", loadBalancer.Value)
+			}
+			fmt.Printf("Uploading using load balancer: %s\n", loadBalancer.Value)
+
+			dis_operations.CheckState(loadBalancer.Value)
+			return dis_operations.Dis_Upload(args, false, loadBalancer.Value)
 		})
 	},
+}
+
+// Custom type to implement flag validation
+type LoadBalancerFlag struct {
+	Value dis_operations.LoadBalancerType
+}
+
+func (l *LoadBalancerFlag) String() string {
+	return string(l.Value)
+}
+
+func (l *LoadBalancerFlag) Set(value string) error {
+	lb := dis_operations.LoadBalancerType(value)
+	if !lb.IsValid() {
+		return fmt.Errorf("invalid load balancer type: %s (valid: RoundRobin, LeastConnections, Random)", value)
+	}
+	l.Value = lb
+	return nil
+}
+
+func (l *LoadBalancerFlag) Type() string {
+	return "LoadBalancerType"
 }
