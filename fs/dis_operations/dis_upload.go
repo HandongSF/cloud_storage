@@ -141,6 +141,8 @@ func getRemote(loadbalancer LoadBalancerType) (Remote, error) {
 		return LoadBalancer_RoundRobin()
 	case LeastDistributed:
 		return LoadBalancer_LeastDistributed()
+	case ResourceBased:
+		return LoadBalancer_ResourceBased()
 	default:
 		return LoadBalancer_RoundRobin()
 	}

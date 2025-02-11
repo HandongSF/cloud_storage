@@ -21,13 +21,14 @@ type LoadBalancerType string
 const (
 	RoundRobin       LoadBalancerType = "RoundRobin"
 	LeastDistributed LoadBalancerType = "LeastDistributed"
+	ResourceBased    LoadBalancerType = "ResourceBased"
 	None             LoadBalancerType = "None" // Invalid value
 )
 
 // Validate the input for load balancer
 func (lb LoadBalancerType) IsValid() bool {
 	switch lb {
-	case RoundRobin, LeastDistributed:
+	case RoundRobin, LeastDistributed, ResourceBased:
 		return true
 	default:
 		return false
@@ -70,13 +71,19 @@ func LoadBalancer_LeastDistributed() (Remote, error) {
 	return remote, nil
 }
 
-func LoadBalancer_ResourceBased() (config.Remote, error) {
+var bestRemote_save = Remote{"", ""}
+
+func LoadBalancer_ResourceBased() (Remote, error) {
+	if bestRemote_save.Name != "" && bestRemote_save.Type != "" {
+		return bestRemote_save, nil
+	}
+
 	remotes := config.GetRemotes()
 	var errs []error
 	var wg sync.WaitGroup
 	var mu sync.Mutex // To protect shared variables
 
-	var bestRemote config.Remote
+	var bestRemote Remote
 	var maxFreeStorage int64
 
 	for _, remote := range remotes {
@@ -84,7 +91,7 @@ func LoadBalancer_ResourceBased() (config.Remote, error) {
 		go func(remote config.Remote) {
 			defer wg.Done()
 
-			val, err := remoteCallAbout([]string{remote.Name})
+			val, err := remoteCallAbout([]string{remote.Name + ":"})
 			if err != nil {
 				mu.Lock()
 				errs = append(errs, fmt.Errorf("error in remoteCallAbout for remote %s: %w", remote.Name, err))
@@ -95,7 +102,7 @@ func LoadBalancer_ResourceBased() (config.Remote, error) {
 			mu.Lock()
 			if val > maxFreeStorage {
 				maxFreeStorage = val
-				bestRemote = remote
+				bestRemote = Remote{remote.Name, remote.Type}
 			}
 			mu.Unlock()
 
@@ -106,8 +113,10 @@ func LoadBalancer_ResourceBased() (config.Remote, error) {
 
 	// If there were errors and no valid remote found, return an error
 	if len(errs) == len(remotes) {
-		return config.Remote{}, fmt.Errorf("all remotes failed: %v", errs)
+		return Remote{}, fmt.Errorf("all remotes failed: %v", errs)
 	}
+
+	bestRemote_save = bestRemote
 
 	return bestRemote, nil
 }
@@ -266,7 +275,7 @@ var aboutCommandDefinitionForRemoteCall = &cobra.Command{
 		cmd.CheckArgs(1, 1, command, args)
 		f := cmd.NewFsSrc(args)
 
-		cmd.Run(false, false, command, func() error {
+		cmd.RunWithSustainOS(false, false, command, func() error {
 			freeStorage, err := getFreeStorage(f)
 			if err != nil {
 				return err
@@ -279,7 +288,7 @@ var aboutCommandDefinitionForRemoteCall = &cobra.Command{
 			command.SetContext(context.WithValue(command.Context(), "freeStorage", freeStorage))
 
 			return nil
-		})
+		}, true)
 	},
 }
 
