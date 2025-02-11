@@ -13,36 +13,31 @@ import (
 
 func Dis_rm(arg []string, reSignal bool) (err error) {
 	//일단 list에 존재하는지 확인
-	fmt.Printf(arg[0] + "\n")
+	fmt.Printf("Dis_rm " + arg[0] + "\n")
 
 	originalFileName := arg[0]
 	var distributedFileArray []DistributedFile
 
-	listOfFiles, err := Dis_ls() //Dis_ls로 목록 체크
+	_, err = GetFileInfoStruct(originalFileName)
 	if err != nil {
-		return fmt.Errorf("GetDistributedFile failed %v", err)
+		return err
 	}
-	fmt.Printf("number of files: %d\n", len(listOfFiles))
-	start := time.Now() // 타이머 시작
 
 	// reRm 인 경우
 	if reSignal {
 		distributedFileArray, err = GetUncompletedFileInfo(originalFileName)
+		if err != nil {
+			return err
+		}
 
 	} else { // reRm이 아닌경우
-		for _, name := range listOfFiles {
-			fmt.Printf("name: " + name + " " + arg[0] + "\n")
-			// Dis_ls로 일치하는 이름을 찾았다면
-			if name == arg[0] {
-				distributedFileArray, err = GetDistributedFileStruct(arg[0])
-				if err != nil {
-					return fmt.Errorf("Failed to get Distributed File Info: %v", err)
-				}
-
-				return nil
-			}
+		distributedFileArray, err = GetDistributedFileStruct(originalFileName)
+		if err != nil {
+			return err
 		}
 	}
+
+	start := time.Now() // 타이머 시작
 	// rm 로직
 	if err := startRmFileGoroutine(originalFileName, distributedFileArray); err != nil {
 		return err
