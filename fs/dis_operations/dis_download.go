@@ -60,10 +60,9 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 		return err
 	}
 
-	var checksums []string
-
+	checksums := make(map[string]string)
 	for _, each := range distributedFileInfos {
-		checksums = append(checksums, each.Checksum)
+		checksums[each.DistributedFile] = each.Checksum
 	}
 
 	err = reedsolomon.DoDecode(args[0], absolutePath, fileInfo.Padding, checksums)
@@ -76,26 +75,6 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 			}
 		}
 		return nil
-	}
-
-	//check checksum
-	//if checksum error -> delete file
-	filePathAndName := path.Join(absolutePath, args[0])
-	newChecksum, err := calculateChecksum(filePathAndName)
-	if err != nil {
-		return err
-	}
-	if newChecksum == GetChecksum(args[0]) {
-		fmt.Printf("checksum is same\n")
-	} else {
-		fmt.Printf("checksum is different\n")
-		//delete file
-		err = os.Remove(filePathAndName)
-		if err != nil {
-			fmt.Printf("Failed to delete file: %v\n", err)
-			return
-		}
-		return fmt.Errorf("checksum is different! so can't download file")
 	}
 
 	// change Flag and Check to false
