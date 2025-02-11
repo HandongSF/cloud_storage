@@ -384,9 +384,9 @@ func GetUncompletedFileInfo(originalFileName string) ([]DistributedFile, error) 
 	var uncompleted []DistributedFile
 	for _, dFile := range fileInfo.DistributedFileInfos {
 		if !dFile.Check {
-			uncompleted = append(uncompleted)
+			uncompleted = append(uncompleted, dFile)
 		}
 	}
 
-	return nil, fmt.Errorf("original file '%s' not found", originalFileName)
+	return uncompleted, nil
 }
