@@ -25,8 +25,8 @@ func Dis_ls() ([]string, error) {
 	}
 
 	var fileNames []string
-	for _, item := range data {
-		fileNames = append(fileNames, item.FileName)
+	for fileName := range data {
+		fileNames = append(fileNames, fileName)
 	}
 
 	return fileNames, nil
