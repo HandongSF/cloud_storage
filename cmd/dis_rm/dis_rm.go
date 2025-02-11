@@ -20,7 +20,7 @@ var commandDefinition = &cobra.Command{
 	Run: func(command *cobra.Command, args []string) {
 		cmd.CheckArgs(1, 1, command, args)
 		cmd.Run(true, true, command, func() error {
-			dis_operations.CheckState()
+			dis_operations.CheckState(dis_operations.None)
 			return dis_operations.Dis_rm(args, false)
 		})
 	},
