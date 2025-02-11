@@ -6,7 +6,7 @@ import (
 	"github.com/rclone/rclone/reedsolomon"
 )
 
-func CheckState() error {
+func CheckState(loadbalancer LoadBalancerType) error {
 	flag, state, origin_name := CheckFlagAndState()
 	if !flag {
 		return nil
@@ -21,7 +21,7 @@ func CheckState() error {
 		if answer {
 			// reupload
 			fmt.Printf("state: %s, answer: %t\n", state, answer)
-			return Dis_Upload([]string{origin_name}, true)
+			return Dis_Upload([]string{origin_name}, true, loadbalancer)
 		} else {
 			// dump old file
 			return DumpUploadState([]string{origin_name})

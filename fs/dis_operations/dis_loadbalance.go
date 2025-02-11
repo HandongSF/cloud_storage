@@ -16,6 +16,24 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type LoadBalancerType string
+
+const (
+	RoundRobin       LoadBalancerType = "RoundRobin"
+	LeastDistributed LoadBalancerType = "LeastDistributed"
+	None             LoadBalancerType = "None" // Invalid value
+)
+
+// Validate the input for load balancer
+func (lb LoadBalancerType) IsValid() bool {
+	switch lb {
+	case RoundRobin, LeastDistributed:
+		return true
+	default:
+		return false
+	}
+}
+
 func LoadBalancer_RoundRobin() (Remote, error) {
 	jsonFilePath := getLoadBalancerJsonFilePath()
 	existingLBInfo, err := readJSON(jsonFilePath)

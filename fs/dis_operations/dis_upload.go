@@ -17,7 +17,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func Dis_Upload(args []string, reSignal bool) error {
+func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) error {
 	absolutePath, err := dis_init(args[0])
 	if err != nil {
 		return err
@@ -55,7 +55,7 @@ func Dis_Upload(args []string, reSignal bool) error {
 			return nil
 		}
 
-		hashedNamesMap, distributedFileArray, err = prepareUpload(originalFileName, absolutePath)
+		hashedNamesMap, distributedFileArray, err = prepareUpload(originalFileName, absolutePath, loadBalancer)
 		if err != nil {
 			return err
 		}
@@ -88,7 +88,7 @@ func createHashNames(distributedFileArray []DistributedFile) (hashNameMap map[st
 	return hashNameMap, errs
 }
 
-func prepareUpload(fileName, absolutePath string) (hashNameMap map[string]string, distributedFileInfos []DistributedFile, err error) {
+func prepareUpload(fileName, absolutePath string, loadBalancer LoadBalancerType) (hashNameMap map[string]string, distributedFileInfos []DistributedFile, err error) {
 	dis_names, checksums, shardSize, padding := reedsolomon.DoEncode(absolutePath)
 
 	remotes := config.GetRemotes()
@@ -102,7 +102,7 @@ func prepareUpload(fileName, absolutePath string) (hashNameMap map[string]string
 	for idx, source := range dis_names {
 		dis_fileName := filepath.Base(source)
 
-		remote, err := LoadBalancer_RoundRobin()
+		remote, err := getRemote(loadBalancer)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -133,6 +133,17 @@ func prepareUpload(fileName, absolutePath string) (hashNameMap map[string]string
 	}
 
 	return hashNameMap, distributedFileInfos, nil
+}
+
+func getRemote(loadbalancer LoadBalancerType) (Remote, error) {
+	switch loadbalancer {
+	case RoundRobin:
+		return LoadBalancer_RoundRobin()
+	case LeastDistributed:
+		return LoadBalancer_LeastDistributed()
+	default:
+		return LoadBalancer_RoundRobin()
+	}
 }
 
 func startUploadFileGoroutine(originalFileName string, hashedFileNameMap map[string]string, distributedFileArray []DistributedFile) (err error) {
