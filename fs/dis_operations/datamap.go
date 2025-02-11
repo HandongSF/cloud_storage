@@ -250,6 +250,7 @@ func CheckFlagAndState() (bool, string, string) {
 // this function is used when downloading or deleting a file.
 func UpdateFileFlag(originalFileName string, state string) error {
 	jsonFileMutex.Lock()
+	defer jsonFileMutex.Unlock()
 
 	filesMap, err := readJsonFile()
 	if err != nil {
@@ -269,7 +270,6 @@ func UpdateFileFlag(originalFileName string, state string) error {
 		return fmt.Errorf("failed to write updated JSON: %v", err)
 	}
 
-	jsonFileMutex.Unlock()
 	return nil
 }
 
