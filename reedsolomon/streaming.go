@@ -247,7 +247,7 @@ func trimPadding(f *os.File, trimSize int64) {
 	}
 }
 
-func DoDecode(fname string, outfn string, padding int64, confChecksums []string) error {
+func DoDecode(fname string, outfn string, padding int64, confChecksums map[string]string) error {
 	// ConfChecksums is the checksums from configfile
 
 	fname = fmt.Sprintf("%s%s", fname, fileCryptExtension)
@@ -261,13 +261,14 @@ func DoDecode(fname string, outfn string, padding int64, confChecksums []string)
 	}
 
 	// Caclulate downloaded Checksum of Shards
-	var shardChecksums []string
+	shardChecksums := make(map[string]string)
 	for i := 0; i < len(confChecksums); i++ {
 		tmpPath := fmt.Sprintf("%s/%s.%d", shardDir, fname, i)
+		fileName := fmt.Sprintf("%s.%d", fname, i)
 		fmt.Println("===" + tmpPath + "===")
 		tmpChecksum, _ := calculateChecksum(tmpPath)
 		fmt.Println(tmpPath + "'s checksum is ::: " + tmpChecksum)
-		shardChecksums = append(shardChecksums, tmpChecksum)
+		shardChecksums[fileName] = tmpChecksum
 	}
 	tmpPath := fmt.Sprintf("%s/%s", shardDir, fname)
 
@@ -1041,22 +1042,23 @@ func calculateChecksum(filePath string) (string, error) {
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-func compareandDeleteChecksum(serverChecksum []string, confChecksum []string, path string) error {
+func compareandDeleteChecksum(serverChecksum map[string]string, confChecksum map[string]string, path string) error {
 
-	minLength := len(serverChecksum)
-	if len(confChecksum) < minLength {
-		minLength = len(confChecksum)
-	}
-	for i := 0; i < minLength; i++ {
-		if serverChecksum[i] != confChecksum[i] {
-			mismatched := fmt.Sprintf("%s.%d", path, i)
-			fmt.Printf("hit delete\n")
-			err := os.Remove(mismatched)
+	fname := filepath.Base(path)
+	numShards := len(confChecksum)
 
-			if err != nil {
-				return fmt.Errorf(" Delete failed: %s, error code: %w", mismatched, err)
+	for i := 0; i < numShards; i++ {
+		fileName := fmt.Sprint("%s.%d", fname, i)
+
+		if serverChecksum[fileName] != confChecksum[fileName] {
+			fileToDelete := fmt.Sprintf("%s.%d", path, i)
+			fmt.Printf("Mismatch for file %s: server checksum %s, conf checksum %s\n", fileToDelete, serverChecksum[fileName], confChecksum[fileName])
+			fmt.Println("Deleting mismatched shard...")
+			if err := os.Remove(fileToDelete); err != nil {
+				return fmt.Errorf("delete failed for %s: %w", fileToDelete, err)
 			}
 		}
 	}
+
 	return nil
 }
