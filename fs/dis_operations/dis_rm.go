@@ -50,20 +50,22 @@ func Dis_rm(arg []string, reSignal bool) (err error) {
 	elapsed := time.Since(start)
 	fmt.Printf("Time taken for dis_rm: %s\n", elapsed)
 
-	// 모든 것이 성공했다면 flag 초기화
+	// 모든 것이 성공했다면
+	// Update Load Balancer Info
+	DecrementRemoteConnectionCounter(distributedFileArray)
+
+	// flag 초기화
 	err = ResetCheckFlag(arg[0])
-	if err == nil {
-		err = RemoveFileFromMetadata(arg[0])
-		if err != nil {
-			return fmt.Errorf("Failed to remove file from metadata: %v", err)
-		}
-		fmt.Printf("Successfully deleted all parts of %s and updated metadata.\n", arg[0])
-		return
-	} else {
-		//??
+	if err != nil {
+		return err
+	}
+	err = RemoveFileFromMetadata(arg[0])
+	if err != nil {
+		return fmt.Errorf("failed to remove file from metadata: %v", err)
 	}
 
-	return fmt.Errorf("file %s does not exist on remote.\n", arg[0])
+	fmt.Printf("Successfully deleted all parts of %s and updated metadata.\n", arg[0])
+	return nil
 }
 
 func remoteCallDeleteFile(args []string) (err error) {
