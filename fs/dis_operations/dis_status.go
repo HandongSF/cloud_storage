@@ -6,10 +6,11 @@ import (
 	"github.com/rclone/rclone/reedsolomon"
 )
 
-func CheckState(loadbalancer LoadBalancerType) error {
+// if return true, do original cmd
+func CheckState(action string, args []string, loadbalancer LoadBalancerType) (bool, error) {
 	flag, state, origin_name := CheckFlagAndState()
 	if !flag {
-		return nil
+		return false, nil
 	}
 
 	fmt.Printf("There is unfinished work: %s - %s\n", state, origin_name)
@@ -21,27 +22,29 @@ func CheckState(loadbalancer LoadBalancerType) error {
 		if answer {
 			// reupload
 			fmt.Printf("state: %s, answer: %t\n", state, answer)
-			return Dis_Upload([]string{origin_name}, true, loadbalancer)
+			return false, Dis_Upload([]string{origin_name}, true, loadbalancer)
 		} else {
 			// dump old file
-			return DumpUploadState([]string{origin_name})
+			return false, DumpUploadState([]string{origin_name})
 		}
 	} else if state == "download" {
 		answer = DoReDownload(origin_name)
 		if answer {
 			//redownload
 			path := AskDestination()
-			return Dis_Download([]string{origin_name, path}, true)
+			redownloadArgs := []string{origin_name, path}
+			return checkSameCommand(action, "download", args, redownloadArgs), Dis_Download(redownloadArgs, true)
 		} else {
 			// dump old file
-			return DumpDownloadState([]string{origin_name})
+			return false, DumpDownloadState([]string{origin_name})
 		}
 	} else if state == "rm" {
 		// dump as default
-		return DumpRmState([]string{origin_name})
+		reremoveArgs := []string{origin_name}
+		return checkSameCommand(action, "remove", args, reremoveArgs), DumpRmState([]string{origin_name})
 	}
 
-	return nil
+	return false, nil
 
 }
 
@@ -129,4 +132,20 @@ func DumpDownloadShards(args []string) (err error) {
 	reedsolomon.DeleteShardWithFileNames(shardsToDump)
 
 	return nil
+}
+
+func checkSameCommand(action, reaction string, args1, args2 []string) bool {
+	if action != reaction {
+		return false
+	}
+
+	if len(args1) != len(args2) {
+		return false
+	}
+	for i := range args1 {
+		if args1[i] != args2[i] {
+			return false
+		}
+	}
+	return true
 }
