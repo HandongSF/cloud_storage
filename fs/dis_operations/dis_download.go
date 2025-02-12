@@ -49,7 +49,7 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 	elapsed := time.Since(start)
 	fmt.Printf("Time taken for dis_download: %s\n", elapsed)
 
-	absolutePath, err := getAbsolutePath(args[0])
+	absolutePath, err := getAbsolutePath(args[1])
 	if err != nil {
 		return err
 	}

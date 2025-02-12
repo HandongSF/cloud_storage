@@ -22,6 +22,16 @@ func ShowDescription_RemoveFile(filename string, err error) bool {
 	return DoRemove()
 }
 
+func AskDestination() string {
+	var dest string
+	fmt.Print("Enter path to download file: ")
+	_, err := fmt.Scanln(&dest)
+	if err != nil {
+		fmt.Printf("Error reading input: %v\n", err)
+	}
+	return dest
+}
+
 func GetUserConfirmation(prompt string, options []string, defaultIndex int) bool {
 	switch i := config.CommandDefault(options, defaultIndex); i {
 	case 'y':
