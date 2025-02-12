@@ -19,17 +19,11 @@ import (
 
 func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) error {
 	absolutePath, err := dis_init(args[0])
-	fmt.Println("----------------------------------------------------")
-	fmt.Printf("File Absolute Path: %s\n", absolutePath)
-	fmt.Println("----------------------------------------------------")
 	if err != nil {
 		return err
 	}
 
 	originalFileName := filepath.Base(args[0])
-	fmt.Println("----------------------------------------------------")
-	fmt.Printf("Original File Name: %s\n", originalFileName)
-	fmt.Println("----------------------------------------------------")
 	var distributedFileArray []DistributedFile
 	hashedNamesMap := make(map[string]string)
 
@@ -50,9 +44,7 @@ func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) err
 			}
 		}
 	} else {
-		fmt.Printf("else name : %s\n", args[0])
 		isDuplicate, err := DoesFileStructExist(originalFileName)
-		fmt.Printf("isDuplicate: %t\n", isDuplicate)
 		if err != nil {
 			return err
 		}
@@ -60,17 +52,14 @@ func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) err
 		if isDuplicate && !ShowDescription(originalFileName) {
 			return nil
 		}
-		fmt.Println("prepareUpload")
 		hashedNamesMap, distributedFileArray, err = prepareUpload(originalFileName, absolutePath, loadBalancer)
 		if err != nil {
 			return err
 		}
 	}
-	fmt.Println("startUploadFileGoroutine")
 	if err := startUploadFileGoroutine(originalFileName, hashedNamesMap, distributedFileArray); err != nil {
 		return err
 	}
-	fmt.Println("ResetCheckFlag")
 	if err := ResetCheckFlag(originalFileName); err != nil {
 		return err
 	}
