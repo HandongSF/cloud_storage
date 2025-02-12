@@ -30,7 +30,8 @@ func CheckState(loadbalancer LoadBalancerType) error {
 		answer = DoReDownload(origin_name)
 		if answer {
 			//redownload
-			return Dis_Download([]string{origin_name}, true)
+			path := AskDestination()
+			return Dis_Download([]string{origin_name, path}, true)
 		} else {
 			// dump old file
 			return DumpDownloadState([]string{origin_name})
