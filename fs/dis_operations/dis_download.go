@@ -49,7 +49,7 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 	elapsed := time.Since(start)
 	fmt.Printf("Time taken for dis_download: %s\n", elapsed)
 
-	absolutePath, err := getAbsolutePath(args[1])
+	absolutePath, err := getAbsolutePath(args[0])
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 
 	err = reedsolomon.DoDecode(args[0], absolutePath, fileInfo.Padding, checksums)
 	if err != nil {
-		result := ShowDescription_RemoveFile(args[0])
+		result := ShowDescription_RemoveFile(args[0], err)
 		if result {
 			err = Dis_rm([]string{args[0]}, false)
 			if err != nil {

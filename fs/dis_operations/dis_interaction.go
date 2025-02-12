@@ -14,8 +14,9 @@ func ShowDescription(filename string) bool {
 	return DoOverwrite()
 }
 
-func ShowDescription_RemoveFile(filename string) bool {
+func ShowDescription_RemoveFile(filename string, err error) bool {
 	fmt.Printf("Error occured during decoding file %s\n", filename)
+	fmt.Printf("%s\n", err)
 	fmt.Println()
 	fmt.Printf("Remove file from remote completely? (This will effectively call dis_rm <file_name>)\n")
 	return DoRemove()

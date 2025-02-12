@@ -132,6 +132,42 @@ func IncrementRoundRobinCounter() error {
 
 	return writeJSON(jsonFilePath, existingLBInfo)
 }
+
+func DecrementRemoteConnectionCounter(distributedFileArray []DistributedFile) error {
+	jsonFilePath := getLoadBalancerJsonFilePath()
+
+	existingLBInfo, err := readJSON(jsonFilePath)
+	if err != nil {
+		return err
+	}
+
+	remoteCounter := make(map[string]int)
+
+	for _, disdistributedFile := range distributedFileArray {
+		remoteCounter[disdistributedFile.Remote.String()]++
+	}
+
+	for remoteKey, occurrence := range remoteCounter {
+		if _, exists := existingLBInfo.RemoteConnectionCounter[remoteKey]; !exists {
+			existingLBInfo.RemoteConnectionCounter[remoteKey] = 0
+		}
+
+		// Decrement but prevent negative values
+		if existingLBInfo.RemoteConnectionCounter[remoteKey] < occurrence {
+			existingLBInfo.RemoteConnectionCounter[remoteKey] = 0
+		} else {
+			existingLBInfo.RemoteConnectionCounter[remoteKey] -= occurrence
+		}
+	}
+
+	err = writeJSON(jsonFilePath, existingLBInfo)
+	if err != nil {
+		return fmt.Errorf("failed to write JSON: %w", err)
+	}
+
+	return nil
+}
+
 func IncrementRemoteConnectionCounter(remote Remote) error {
 	jsonFilePath := getLoadBalancerJsonFilePath()
 
@@ -144,14 +180,16 @@ func IncrementRemoteConnectionCounter(remote Remote) error {
 		existingLBInfo.RemoteConnectionCounter = make(map[string]int)
 	}
 
-	// Convert Remote struct to a string key
 	remoteKey := remote.String()
 
-	// Increment the connection counter for the remote
 	existingLBInfo.RemoteConnectionCounter[remoteKey]++
 
-	// Write the updated data back to the file
-	return writeJSON(jsonFilePath, existingLBInfo)
+	err = writeJSON(jsonFilePath, existingLBInfo)
+	if err != nil {
+		return fmt.Errorf("failed to write JSON: %w", err)
+	}
+
+	return nil
 }
 
 func getLoadBalancerJsonFilePath() string {
@@ -282,7 +320,7 @@ var aboutCommandDefinitionForRemoteCall = &cobra.Command{
 			}
 
 			// Print free storage
-			fmt.Printf("Free Storage: %v\n", freeStorage)
+			fmt.Printf("Remote %s Free Storage: %v\n", args[0], freeStorage)
 
 			// Store free storage in the command context for later retrieval
 			command.SetContext(context.WithValue(command.Context(), "freeStorage", freeStorage))
