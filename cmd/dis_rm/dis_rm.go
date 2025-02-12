@@ -20,8 +20,14 @@ var commandDefinition = &cobra.Command{
 	Run: func(command *cobra.Command, args []string) {
 		cmd.CheckArgs(1, 1, command, args)
 		cmd.Run(true, true, command, func() error {
-			dis_operations.CheckState(dis_operations.None)
-			return dis_operations.Dis_rm(args, false)
+			sameCommand, err := dis_operations.CheckState("remove", args, dis_operations.None)
+			if err != nil {
+				return err
+			}
+			if !sameCommand {
+				return dis_operations.Dis_rm(args, false)
+			}
+			return nil
 		})
 	},
 }

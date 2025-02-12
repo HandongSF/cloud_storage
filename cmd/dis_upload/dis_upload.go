@@ -51,7 +51,10 @@ If you wish to simply copy the file without any distribution, use the
 			}
 			fmt.Printf("Uploading using load balancer: %s\n", loadBalancer.Value)
 
-			dis_operations.CheckState(loadBalancer.Value)
+			_, err := dis_operations.CheckState("upload", args, loadBalancer.Value)
+			if err != nil {
+				return err
+			}
 			return dis_operations.Dis_Upload(args, false, loadBalancer.Value)
 		})
 	},
