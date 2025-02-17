@@ -4,10 +4,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+
+	"github.com/rclone/rclone/fs/dis_config"
 )
 
 // return filename
 func Dis_ls() ([]string, error) {
+
+	rclonePath := GetRcloneDirPath()
+
+	//remote->local sync
+	err := dis_config.SyncAnyRemoteToLocal(rclonePath)
+	fmt.Printf("dis_ls err : %s\n", err)
+
 	FilePath := getJsonFilePath()
 
 	// 파일 열기
