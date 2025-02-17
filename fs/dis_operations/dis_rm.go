@@ -7,11 +7,20 @@ import (
 	"time"
 
 	"github.com/rclone/rclone/cmd"
+	"github.com/rclone/rclone/fs/dis_config"
 	"github.com/rclone/rclone/fs/operations"
 	"github.com/spf13/cobra"
 )
 
 func Dis_rm(arg []string, reSignal bool) (err error) {
+	rclonePath := GetRcloneDirPath()
+
+	//remote->local sync
+	err = dis_config.SyncAnyRemoteToLocal(rclonePath)
+	if err != nil {
+		return err
+	}
+
 	//일단 list에 존재하는지 확인
 	fmt.Printf("Dis_rm " + arg[0] + "\n")
 
@@ -65,6 +74,10 @@ func Dis_rm(arg []string, reSignal bool) (err error) {
 	}
 
 	fmt.Printf("Successfully deleted all parts of %s and updated metadata.\n", arg[0])
+	err = dis_config.SyncAllLocalToRemote(rclonePath)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
