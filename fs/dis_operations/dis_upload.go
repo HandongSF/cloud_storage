@@ -58,10 +58,17 @@ func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) err
 			return err
 		}
 
-		if isDuplicate && !ShowDescription(originalFileName) {
-			return nil
+		if isDuplicate {
+			if ShowDescription_DoOverwrite(originalFileName) {
+				err = Dis_rm(args, false)
+				if err != nil {
+					return err
+				}
+			} else {
+				return nil
+			}
 		}
-		hashedNamesMap, distributedFileArray, err = prepareUpload(originalFileName, absolutePath, loadBalancer)
+		hashedNamesMap, distributedFileArray, err = prepareUpload(absolutePath, loadBalancer)
 		if err != nil {
 			return err
 		}
@@ -98,7 +105,7 @@ func createHashNames(distributedFileArray []DistributedFile) (hashNameMap map[st
 	return hashNameMap, errs
 }
 
-func prepareUpload(fileName, absolutePath string, loadBalancer LoadBalancerType) (hashNameMap map[string]string, distributedFileInfos []DistributedFile, err error) {
+func prepareUpload(absolutePath string, loadBalancer LoadBalancerType) (hashNameMap map[string]string, distributedFileInfos []DistributedFile, err error) {
 	dis_names, checksums, shardSize, padding := reedsolomon.DoEncode(absolutePath)
 
 	remotes := config.GetRemotes()

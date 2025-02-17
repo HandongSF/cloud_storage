@@ -6,8 +6,7 @@ import (
 	"github.com/rclone/rclone/fs/config"
 )
 
-// ShowRemotes shows an overview of the config file
-func ShowDescription(filename string) bool {
+func ShowDescription_DoOverwrite(filename string) bool {
 	fmt.Printf("A duplicate of file %s already exists in remote.\n", filename)
 	fmt.Println()
 	fmt.Printf("Do overwrite the file?\n")

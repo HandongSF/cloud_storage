@@ -61,7 +61,7 @@ func Dis_rm(arg []string, reSignal bool) (err error) {
 
 	// 모든 것이 성공했다면
 	// Update Load Balancer Info
-	DecrementRemoteConnectionCounter(distributedFileArray)
+	DecrementShardCount(distributedFileArray)
 
 	// flag 초기화
 	err = ResetCheckFlag(arg[0])
