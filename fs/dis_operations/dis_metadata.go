@@ -26,9 +26,17 @@ type Remote struct {
 	Type string `json:"remote_type"`
 }
 
+type BoltzmannInfo struct {
+	RecentSpeeds   []float64      `json:"recent_speeds"` // Stores recent upload speeds (e.g., last 5 uploads)
+	MaxSpeed       float64        `json:"max_speed"`     // Maximum observed throughput (moving average)
+	ShardCount     int            `json:"shard_count"`
+	FileShardCount map[string]int `json:"file_shard_count"` // Tracks shard concentration per file
+	Penalty        float64        `json:"penalty"`          // Penalty factor for unsafe conditions
+}
+
 type LoadBalancerInfo struct {
-	RoundRobinCounter       int            `json:"RoundRobin_Counter"`
-	RemoteConnectionCounter map[string]int `json:"Remote_Connection_Counter"`
+	RoundRobinCounter    int                      `json:"RoundRobin_Counter"`
+	RemoteBoltzmannInfos map[string]BoltzmannInfo `json:"Remote_Bolzmann_Info"`
 }
 
 var remoteDirectory = "Distribution"

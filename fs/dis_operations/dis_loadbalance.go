@@ -22,13 +22,14 @@ const (
 	RoundRobin       LoadBalancerType = "RoundRobin"
 	LeastDistributed LoadBalancerType = "LeastDistributed"
 	ResourceBased    LoadBalancerType = "ResourceBased"
+	Boltzmann        LoadBalancerType = "Boltzmann"
 	None             LoadBalancerType = "None" // Invalid value
 )
 
 // Validate the input for load balancer
 func (lb LoadBalancerType) IsValid() bool {
 	switch lb {
-	case RoundRobin, LeastDistributed, ResourceBased:
+	case RoundRobin, LeastDistributed, ResourceBased, Boltzmann:
 		return true
 	default:
 		return false
@@ -53,20 +54,14 @@ func LoadBalancer_RoundRobin() (Remote, error) {
 
 	// Increment counters
 	IncrementRoundRobinCounter()
-	IncrementRemoteConnectionCounter(selectedRemoteObj)
+	IncrementShardCount(selectedRemoteObj)
 
 	return selectedRemoteObj, nil
 }
 
 func LoadBalancer_LeastDistributed() (Remote, error) {
-	jsonFilePath := getLoadBalancerJsonFilePath()
-	existingLBInfo, err := readJSON(jsonFilePath)
-	if err != nil {
-		return Remote{}, err
-	}
-
-	remote := getKeyOfSmallestValue(existingLBInfo.RemoteConnectionCounter)
-	IncrementRemoteConnectionCounter(remote)
+	remote := getRemoteOfSmallestShardCount()
+	IncrementShardCount(remote)
 
 	return remote, nil
 }
@@ -121,6 +116,11 @@ func LoadBalancer_ResourceBased() (Remote, error) {
 	return bestRemote, nil
 }
 
+func LoadBalancer_Bolzmann() (Remote, error) {
+
+	return Remote{}, nil
+}
+
 func IncrementRoundRobinCounter() error {
 	jsonFilePath := getLoadBalancerJsonFilePath()
 	existingLBInfo, err := readJSON(jsonFilePath)
@@ -133,9 +133,8 @@ func IncrementRoundRobinCounter() error {
 	return writeJSON(jsonFilePath, existingLBInfo)
 }
 
-func DecrementRemoteConnectionCounter(distributedFileArray []DistributedFile) error {
+func DecrementShardCount(distributedFileArray []DistributedFile) error {
 	jsonFilePath := getLoadBalancerJsonFilePath()
-
 	existingLBInfo, err := readJSON(jsonFilePath)
 	if err != nil {
 		return err
@@ -143,21 +142,30 @@ func DecrementRemoteConnectionCounter(distributedFileArray []DistributedFile) er
 
 	remoteCounter := make(map[string]int)
 
-	for _, disdistributedFile := range distributedFileArray {
-		remoteCounter[disdistributedFile.Remote.String()]++
+	for _, distributedFile := range distributedFileArray {
+		remoteCounter[distributedFile.Remote.String()]++
 	}
 
 	for remoteKey, occurrence := range remoteCounter {
-		if _, exists := existingLBInfo.RemoteConnectionCounter[remoteKey]; !exists {
-			existingLBInfo.RemoteConnectionCounter[remoteKey] = 0
+		boltzmannInfo, exists := existingLBInfo.RemoteBoltzmannInfos[remoteKey]
+		if !exists {
+			boltzmannInfo = BoltzmannInfo{
+				RecentSpeeds:   []float64{},
+				MaxSpeed:       0,
+				ShardCount:     0,
+				FileShardCount: make(map[string]int),
+				Penalty:        0,
+			}
 		}
 
 		// Decrement but prevent negative values
-		if existingLBInfo.RemoteConnectionCounter[remoteKey] < occurrence {
-			existingLBInfo.RemoteConnectionCounter[remoteKey] = 0
+		if boltzmannInfo.ShardCount < occurrence {
+			boltzmannInfo.ShardCount = 0
 		} else {
-			existingLBInfo.RemoteConnectionCounter[remoteKey] -= occurrence
+			boltzmannInfo.ShardCount -= occurrence
 		}
+
+		existingLBInfo.RemoteBoltzmannInfos[remoteKey] = boltzmannInfo
 	}
 
 	err = writeJSON(jsonFilePath, existingLBInfo)
@@ -168,7 +176,7 @@ func DecrementRemoteConnectionCounter(distributedFileArray []DistributedFile) er
 	return nil
 }
 
-func IncrementRemoteConnectionCounter(remote Remote) error {
+func IncrementShardCount(remote Remote) error {
 	jsonFilePath := getLoadBalancerJsonFilePath()
 
 	existingLBInfo, err := readJSON(jsonFilePath)
@@ -176,13 +184,27 @@ func IncrementRemoteConnectionCounter(remote Remote) error {
 		return err
 	}
 
-	if existingLBInfo.RemoteConnectionCounter == nil {
-		existingLBInfo.RemoteConnectionCounter = make(map[string]int)
+	if existingLBInfo.RemoteBoltzmannInfos == nil {
+		existingLBInfo.RemoteBoltzmannInfos = make(map[string]BoltzmannInfo)
 	}
 
 	remoteKey := remote.String()
+	boltzmannInfo, exists := existingLBInfo.RemoteBoltzmannInfos[remoteKey]
 
-	existingLBInfo.RemoteConnectionCounter[remoteKey]++
+	if !exists {
+		boltzmannInfo = BoltzmannInfo{
+			RecentSpeeds:   []float64{},
+			MaxSpeed:       0,
+			ShardCount:     0,
+			FileShardCount: make(map[string]int),
+			Penalty:        0,
+		}
+	}
+
+	// Increment shard count
+	boltzmannInfo.ShardCount++
+
+	existingLBInfo.RemoteBoltzmannInfos[remoteKey] = boltzmannInfo
 
 	err = writeJSON(jsonFilePath, existingLBInfo)
 	if err != nil {
@@ -218,8 +240,8 @@ func getLoadBalancerJsonFilePath() string {
 
 		// Initialize LoadBalancerInfo with default values
 		lbInfo := LoadBalancerInfo{
-			RoundRobinCounter:       0,
-			RemoteConnectionCounter: make(map[string]int),
+			RoundRobinCounter:    0,
+			RemoteBoltzmannInfos: make(map[string]BoltzmannInfo),
 		}
 
 		// Marshal the LoadBalancerInfo struct to JSON format
@@ -273,15 +295,21 @@ func writeJSON(filename string, lbInfo *LoadBalancerInfo) error {
 	return nil
 }
 
-func getKeyOfSmallestValue(counter map[string]int) Remote {
+func getRemoteOfSmallestShardCount() Remote {
+	jsonFilePath := getLoadBalancerJsonFilePath()
+	existingLBInfo, err := readJSON(jsonFilePath)
+	if err != nil {
+		return Remote{}
+	}
+
 	var minKey string
 	var minValue int
 	firstIteration := true
 
-	// Find the key with the smallest value
-	for key, value := range counter {
-		if firstIteration || value < minValue {
-			minValue = value
+	// Find the remote with the smallest shard count
+	for key, value := range existingLBInfo.RemoteBoltzmannInfos {
+		if firstIteration || value.ShardCount < minValue {
+			minValue = value.ShardCount
 			minKey = key
 			firstIteration = false
 		}
