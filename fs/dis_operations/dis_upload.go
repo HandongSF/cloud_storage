@@ -11,6 +11,7 @@ import (
 	"github.com/rclone/rclone/cmd"
 	"github.com/rclone/rclone/fs"
 	"github.com/rclone/rclone/fs/config"
+	"github.com/rclone/rclone/fs/dis_config"
 	"github.com/rclone/rclone/fs/operations"
 	rsync "github.com/rclone/rclone/fs/sync"
 	"github.com/rclone/rclone/reedsolomon"
@@ -19,6 +20,14 @@ import (
 
 func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) error {
 	absolutePath, err := dis_init(args[0])
+	if err != nil {
+		return err
+	}
+
+	rclonePath := GetRcloneDirPath()
+
+	//remote->local sync
+	err = dis_config.SyncAnyRemoteToLocal(rclonePath)
 	if err != nil {
 		return err
 	}
@@ -65,6 +74,12 @@ func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) err
 	}
 
 	fmt.Println("Completed Dis_Upload!")
+	//local->remote sync
+	err = dis_config.SyncAllLocalToRemote(rclonePath)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
