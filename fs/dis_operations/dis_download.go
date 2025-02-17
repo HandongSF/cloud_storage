@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/rclone/rclone/cmd"
+	"github.com/rclone/rclone/fs/dis_config"
 	"github.com/rclone/rclone/fs/operations"
 	"github.com/rclone/rclone/reedsolomon"
 	"github.com/spf13/cobra"
@@ -17,6 +18,13 @@ import (
 
 func Dis_Download(args []string, reSignal bool) (err error) {
 
+	rclonePath := GetRcloneDirPath()
+
+	//remote->local sync
+	err = dis_config.SyncAnyRemoteToLocal(rclonePath)
+	if err != nil {
+		return err
+	}
 	_, err = GetFileInfoStruct(args[0])
 	if err != nil {
 		return err
