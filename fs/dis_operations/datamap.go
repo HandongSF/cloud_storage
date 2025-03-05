@@ -274,13 +274,13 @@ func UpdateFileFlag(originalFileName string, state string) error {
 }
 
 // updating distributedfile check flag after uploading, downloading or removing
-func UpdateDistributedFileCheckFlag(originalFileName string, distributedFileName string, newCheck bool) error {
+func updateDistributedFile(originalFileName, distributedFileName string, updateFunc func(*DistributedFile) error) error {
 	jsonFileMutex.Lock()
 	defer jsonFileMutex.Unlock()
 
 	filesMap, err := readJsonFile()
 	if err != nil {
-		return fmt.Errorf("failed to read JSON file : %v\n", err)
+		return fmt.Errorf("failed to read JSON file: %v", err)
 	}
 
 	fileInfo, exists := filesMap[originalFileName]
@@ -290,21 +290,39 @@ func UpdateDistributedFileCheckFlag(originalFileName string, distributedFileName
 
 	dFile, exists := fileInfo.DistributedFileInfos[distributedFileName]
 	if !exists {
-		return fmt.Errorf("failed to update flag: distributed file '%s' not found for original file '%s'", distributedFileName, originalFileName)
+		return fmt.Errorf("distributed file '%s' not found for original file '%s'", distributedFileName, originalFileName)
 	}
 
-	dFile.Check = newCheck
-	fileInfo.DistributedFileInfos[distributedFileName] = dFile
+	// Apply the update function
+	if err := updateFunc(&dFile); err != nil {
+		return err
+	}
 
+	fileInfo.DistributedFileInfos[distributedFileName] = dFile
 	filesMap[originalFileName] = fileInfo
 
 	err = writeJsonFile(getJsonFilePath(), filesMap)
 	if err != nil {
 		return fmt.Errorf("failed to write updated JSON: %v", err)
 	}
-	fmt.Printf("check flag updated!\n")
 
+	//fmt.Println("Check flag updated!")
 	return nil
+}
+
+func UpdateDistributedFile_CheckFlag(originalFileName, distributedFileName string, newCheck bool) error {
+	return updateDistributedFile(originalFileName, distributedFileName, func(dFile *DistributedFile) error {
+		dFile.Check = newCheck
+		return nil
+	})
+}
+
+func UpdateDistributedFile_CheckFlagAndRemote(originalFileName, distributedFileName string, newCheck bool, remote Remote) error {
+	return updateDistributedFile(originalFileName, distributedFileName, func(dFile *DistributedFile) error {
+		dFile.Check = newCheck
+		dFile.Remote = remote
+		return nil
+	})
 }
 
 // resetting file check flag after finishing operation

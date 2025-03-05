@@ -54,14 +54,12 @@ func LoadBalancer_RoundRobin() (Remote, error) {
 
 	// Increment counters
 	IncrementRoundRobinCounter()
-	IncrementShardCount(selectedRemoteObj)
 
 	return selectedRemoteObj, nil
 }
 
 func LoadBalancer_LeastDistributed() (Remote, error) {
 	remote := getRemoteOfSmallestShardCount()
-	IncrementShardCount(remote)
 
 	return remote, nil
 }
@@ -133,80 +131,25 @@ func IncrementRoundRobinCounter() error {
 	return writeJSON(jsonFilePath, existingLBInfo)
 }
 
-func DecrementShardCount(distributedFileArray []DistributedFile) error {
+func UpdateBoltzmannInfo(remote Remote, updateFunc func(*BoltzmannInfo)) error {
 	jsonFilePath := getLoadBalancerJsonFilePath()
-	existingLBInfo, err := readJSON(jsonFilePath)
+	lbInfo, err := getLoadBalancerInfo(jsonFilePath)
 	if err != nil {
 		return err
 	}
 
-	remoteCounter := make(map[string]int)
+	// Get or initialize BoltzmannInfo (use pointer to it)
+	boltzmannInfo := getBoltzmannInfo(remote, lbInfo)
 
-	for _, distributedFile := range distributedFileArray {
-		remoteCounter[distributedFile.Remote.String()]++
-	}
+	// Apply the provided update function
+	updateFunc(&boltzmannInfo)
+	//boltzmannInfo.PrintInfo()
 
-	for remoteKey, occurrence := range remoteCounter {
-		boltzmannInfo, exists := existingLBInfo.RemoteBoltzmannInfos[remoteKey]
-		if !exists {
-			boltzmannInfo = BoltzmannInfo{
-				RecentSpeeds:   []float64{},
-				MaxSpeed:       0,
-				ShardCount:     0,
-				FileShardCount: make(map[string]int),
-				Penalty:        0,
-			}
-		}
+	// Since the map stores struct values, we must explicitly update it
+	lbInfo.RemoteBoltzmannInfos[remote.String()] = boltzmannInfo
 
-		// Decrement but prevent negative values
-		if boltzmannInfo.ShardCount < occurrence {
-			boltzmannInfo.ShardCount = 0
-		} else {
-			boltzmannInfo.ShardCount -= occurrence
-		}
-
-		existingLBInfo.RemoteBoltzmannInfos[remoteKey] = boltzmannInfo
-	}
-
-	err = writeJSON(jsonFilePath, existingLBInfo)
-	if err != nil {
-		return fmt.Errorf("failed to write JSON: %w", err)
-	}
-
-	return nil
-}
-
-func IncrementShardCount(remote Remote) error {
-	jsonFilePath := getLoadBalancerJsonFilePath()
-
-	existingLBInfo, err := readJSON(jsonFilePath)
-	if err != nil {
-		return err
-	}
-
-	if existingLBInfo.RemoteBoltzmannInfos == nil {
-		existingLBInfo.RemoteBoltzmannInfos = make(map[string]BoltzmannInfo)
-	}
-
-	remoteKey := remote.String()
-	boltzmannInfo, exists := existingLBInfo.RemoteBoltzmannInfos[remoteKey]
-
-	if !exists {
-		boltzmannInfo = BoltzmannInfo{
-			RecentSpeeds:   []float64{},
-			MaxSpeed:       0,
-			ShardCount:     0,
-			FileShardCount: make(map[string]int),
-			Penalty:        0,
-		}
-	}
-
-	// Increment shard count
-	boltzmannInfo.ShardCount++
-
-	existingLBInfo.RemoteBoltzmannInfos[remoteKey] = boltzmannInfo
-
-	err = writeJSON(jsonFilePath, existingLBInfo)
+	// Write updated info back to JSON
+	err = writeJSON(jsonFilePath, lbInfo)
 	if err != nil {
 		return fmt.Errorf("failed to write JSON: %w", err)
 	}
@@ -293,6 +236,43 @@ func writeJSON(filename string, lbInfo *LoadBalancerInfo) error {
 	}
 
 	return nil
+}
+
+func getLoadBalancerInfo(jsonFilePath string) (*LoadBalancerInfo, error) {
+	existingLBInfo, err := readJSON(jsonFilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	return existingLBInfo, nil
+}
+
+func getBoltzmannInfo(remote Remote, loadBalancerInfo *LoadBalancerInfo) BoltzmannInfo {
+	if loadBalancerInfo.RemoteBoltzmannInfos == nil {
+		loadBalancerInfo.RemoteBoltzmannInfos = make(map[string]BoltzmannInfo)
+	}
+
+	remoteKey := remote.String()
+
+	// Retrieve the BoltzmannInfoData for the given remote
+	boltzmannInfo, exists := loadBalancerInfo.RemoteBoltzmannInfos[remoteKey]
+
+	// If the data does not exist, create a new one
+	if !exists {
+		boltzmannInfo = BoltzmannInfo{
+			//RecentSpeeds:   []float64{},
+			//MaxSpeed:       0,
+			ShardCount: 0,
+			//FileShardCount: make(map[string]int),
+			//Penalty:        0,
+		}
+	}
+
+	// Since the map stores struct values, we must explicitly update it
+	loadBalancerInfo.RemoteBoltzmannInfos[remoteKey] = boltzmannInfo
+
+	// Return a pointer to the map entry (modifications will persist)
+	return loadBalancerInfo.RemoteBoltzmannInfos[remoteKey]
 }
 
 func getRemoteOfSmallestShardCount() Remote {

@@ -7,22 +7,18 @@ import (
 	"time"
 
 	"github.com/rclone/rclone/cmd"
-	"github.com/rclone/rclone/fs/dis_config"
 	"github.com/rclone/rclone/fs/operations"
 	"github.com/spf13/cobra"
 )
 
 func Dis_rm(arg []string, reSignal bool) (err error) {
-	rclonePath := GetRcloneDirPath()
+	//rclonePath := GetRcloneDirPath()
 
 	//remote->local sync
-	err = dis_config.SyncAnyRemoteToLocal(rclonePath)
-	if err != nil {
-		return err
-	}
-
-	//일단 list에 존재하는지 확인
-	fmt.Printf("Dis_rm " + arg[0] + "\n")
+	//err = dis_config.SyncAnyRemoteToLocal(rclonePath)
+	//if err != nil {
+	//	return err
+	//}
 
 	originalFileName := arg[0]
 	var distributedFileArray []DistributedFile
@@ -32,14 +28,14 @@ func Dis_rm(arg []string, reSignal bool) (err error) {
 		return err
 	}
 
-	// reRm 인 경우
+	// if re-rm (due to previous failure)
 	if reSignal {
 		distributedFileArray, err = GetUncompletedFileInfo(originalFileName)
 		if err != nil {
 			return err
 		}
 
-	} else { // reRm이 아닌경우
+	} else {
 		err = UpdateFileFlag(originalFileName, "rm")
 		if err != nil {
 			return err
@@ -50,8 +46,8 @@ func Dis_rm(arg []string, reSignal bool) (err error) {
 		}
 	}
 
-	start := time.Now() // 타이머 시작
-	// rm 로직
+	start := time.Now()
+
 	if err := startRmFileGoroutine(originalFileName, distributedFileArray); err != nil {
 		return err
 	}
@@ -59,11 +55,7 @@ func Dis_rm(arg []string, reSignal bool) (err error) {
 	elapsed := time.Since(start)
 	fmt.Printf("Time taken for dis_rm: %s\n", elapsed)
 
-	// 모든 것이 성공했다면
-	// Update Load Balancer Info
-	DecrementShardCount(distributedFileArray)
-
-	// flag 초기화
+	// Reset flag of File
 	err = ResetCheckFlag(arg[0])
 	if err != nil {
 		return err
@@ -74,10 +66,11 @@ func Dis_rm(arg []string, reSignal bool) (err error) {
 	}
 
 	fmt.Printf("Successfully deleted all parts of %s and updated metadata.\n", arg[0])
-	err = dis_config.SyncAllLocalToRemote(rclonePath)
-	if err != nil {
-		return err
-	}
+	//err = dis_config.SyncAllLocalToRemote(rclonePath)
+	//if err != nil {
+	//	return err
+	//}
+
 	return nil
 }
 
@@ -96,6 +89,7 @@ func remoteCallDeleteFile(args []string) (err error) {
 }
 
 func startRmFileGoroutine(originalFileName string, distributedFileArray []DistributedFile) (err error) {
+	var mu sync.Mutex
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(distributedFileArray))
 
@@ -104,20 +98,36 @@ func startRmFileGoroutine(originalFileName string, distributedFileArray []Distri
 		wg.Add(1)
 		go func(info DistributedFile) {
 			defer wg.Done()
-			//arg인자에 Info.Remote.Name:Distribution/info.DistributedFile
+
+			// Info.Remote.Name:Distribution/info.DistributedFile
 			hashedFileName, err := CalculateHash(info.DistributedFile)
 			if err != nil {
 				errCh <- fmt.Errorf("failed to calculate hash %v", err)
 			}
+
 			remotePath := fmt.Sprintf("%s:%s/%s", info.Remote.Name, remoteDirectory, hashedFileName)
-			fmt.Printf("Deleting file on remote: %s\n", remotePath)
 
 			if err := remoteCallDeleteFile([]string{remotePath}); err != nil {
 				errCh <- fmt.Errorf("failed to delete %s on remote %s: %w", info.DistributedFile, info.Remote.Name, err)
 			}
 
-			// 삭제했다면 플래그 업데이트
-			UpdateDistributedFileCheckFlag(originalFileName, info.DistributedFile, true)
+			// Update flags
+			err = UpdateDistributedFile_CheckFlag(originalFileName, info.DistributedFile, true)
+			if err != nil {
+				fmt.Printf("UpdateDistributedFile_CheckFlag 에러 : %v\n", err)
+			}
+
+			// Update BoltzmannInfo in a thread-safe manner
+			mu.Lock()
+			err = UpdateBoltzmannInfo(info.Remote, func(b *BoltzmannInfo) {
+				b.DecrementShardCount()
+				//b.UpdateFileShardCount(info.DistributedFile, -1)
+			})
+			mu.Unlock()
+
+			if err != nil {
+				errCh <- fmt.Errorf("error updating boltzmann info: %v", err)
+			}
 		}(info)
 	}
 
@@ -130,7 +140,7 @@ func startRmFileGoroutine(originalFileName string, distributedFileArray []Distri
 	}
 
 	if len(deleteErrs) > 0 {
-		return fmt.Errorf("Errors occurred while deleting files: %v", deleteErrs)
+		return fmt.Errorf("errors occurred while deleting files: %v", deleteErrs)
 	}
 
 	return nil
