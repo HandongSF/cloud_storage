@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/rclone/rclone/cmd"
 	"github.com/rclone/rclone/fs"
 	"github.com/rclone/rclone/fs/config"
-	"github.com/rclone/rclone/fs/dis_config"
 	"github.com/rclone/rclone/fs/operations"
 	rsync "github.com/rclone/rclone/fs/sync"
 	"github.com/rclone/rclone/reedsolomon"
@@ -24,13 +24,13 @@ func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) err
 		return err
 	}
 
-	rclonePath := GetRcloneDirPath()
+	//rclonePath := GetRcloneDirPath()
 
 	//remote->local sync
-	err = dis_config.SyncAnyRemoteToLocal(rclonePath)
-	if err != nil {
-		return err
-	}
+	//err = dis_config.SyncAnyRemoteToLocal(rclonePath)
+	// if err != nil {
+	// 	return err
+	// }
 
 	originalFileName := filepath.Base(args[0])
 	var distributedFileArray []DistributedFile
@@ -68,12 +68,12 @@ func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) err
 				return nil
 			}
 		}
-		hashedNamesMap, distributedFileArray, err = prepareUpload(absolutePath, loadBalancer)
+		hashedNamesMap, distributedFileArray, err = prepareUpload(absolutePath)
 		if err != nil {
 			return err
 		}
 	}
-	if err := startUploadFileGoroutine(originalFileName, hashedNamesMap, distributedFileArray); err != nil {
+	if err := startUploadFileGoroutine(originalFileName, hashedNamesMap, distributedFileArray, loadBalancer); err != nil {
 		return err
 	}
 	if err := ResetCheckFlag(originalFileName); err != nil {
@@ -82,10 +82,10 @@ func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) err
 
 	fmt.Println("Completed Dis_Upload!")
 	//local->remote sync
-	err = dis_config.SyncAllLocalToRemote(rclonePath)
-	if err != nil {
-		return err
-	}
+	// err = dis_config.SyncAllLocalToRemote(rclonePath)
+	// if err != nil {
+	// 	return err
+	// }
 
 	return nil
 }
@@ -105,7 +105,7 @@ func createHashNames(distributedFileArray []DistributedFile) (hashNameMap map[st
 	return hashNameMap, errs
 }
 
-func prepareUpload(absolutePath string, loadBalancer LoadBalancerType) (hashNameMap map[string]string, distributedFileInfos []DistributedFile, err error) {
+func prepareUpload(absolutePath string) (hashNameMap map[string]string, distributedFileInfos []DistributedFile, err error) {
 	dis_names, checksums, shardSize, padding := reedsolomon.DoEncode(absolutePath)
 
 	remotes := config.GetRemotes()
@@ -119,12 +119,8 @@ func prepareUpload(absolutePath string, loadBalancer LoadBalancerType) (hashName
 	for idx, source := range dis_names {
 		dis_fileName := filepath.Base(source)
 
-		remote, err := getRemote(loadBalancer)
-		if err != nil {
-			return nil, nil, err
-		}
-		// Get the distributed info
-		distributionFile, err := GetDistributedInfo(dis_fileName, Remote{remote.Name, remote.Type}, checksums[idx])
+		// Get the distributed info (Remote is filled at distribution-time)
+		distributionFile, err := GetDistributedInfo(dis_fileName, Remote{}, checksums[idx])
 		if err != nil {
 			return nil, nil, err
 		}
@@ -146,20 +142,7 @@ func prepareUpload(absolutePath string, loadBalancer LoadBalancerType) (hashName
 	return hashNameMap, distributedFileInfos, nil
 }
 
-func getRemote(loadbalancer LoadBalancerType) (Remote, error) {
-	switch loadbalancer {
-	case RoundRobin:
-		return LoadBalancer_RoundRobin()
-	case LeastDistributed:
-		return LoadBalancer_LeastDistributed()
-	case ResourceBased:
-		return LoadBalancer_ResourceBased()
-	default:
-		return LoadBalancer_RoundRobin()
-	}
-}
-
-func startUploadFileGoroutine(originalFileName string, hashedFileNameMap map[string]string, distributedFileArray []DistributedFile) (err error) {
+func startUploadFileGoroutine(originalFileName string, hashedFileNameMap map[string]string, distributedFileArray []DistributedFile, loadBalancer LoadBalancerType) (err error) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	var errs []error
@@ -168,30 +151,76 @@ func startUploadFileGoroutine(originalFileName string, hashedFileNameMap map[str
 	for _, shardInfo := range distributedFileArray {
 		wg.Add(1)
 
-		go func(shardInfo DistributedFile) {
+		go func(shardInfo DistributedFile, loadBalancer LoadBalancerType) {
 			defer wg.Done()
+
+			// Allocate Remote
+			mu.Lock()
+			err := shardInfo.AllocateRemote(loadBalancer)
+			mu.Unlock()
+			if err != nil {
+				errs = append(errs, err)
+			}
+
 			dest := fmt.Sprintf("%s:%s", shardInfo.Remote.Name, remoteDirectory)
 			fmt.Printf("Uploading file %s to %s\n", hashedFileNameMap[shardInfo.DistributedFile], dest)
 
 			source := filepath.Join(dir, hashedFileNameMap[shardInfo.DistributedFile])
 
+			// Get the size of the file being uploaded
+			fileInfo, err := os.Stat(source)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("error getting file info for %s: %w", source, err))
+				return
+			}
+			fileSize := fileInfo.Size() // File size in bytes
+
+			// Start measuring time for throughput calculation
+			startTime := time.Now()
 			err = remoteCallCopy([]string{source, dest})
 			if err != nil {
 				errs = append(errs, fmt.Errorf("error in remoteCallCopy for file %s: %w", source, err))
 				return
 			}
+			elapsedTime := time.Since(startTime)
 
-			err = UpdateDistributedFileCheckFlag(originalFileName, shardInfo.DistributedFile, true)
+			// Calculate throughput: throughput = fileSize / elapsedTime
+			throughput := float64(fileSize) / elapsedTime.Seconds() // Bytes per second
+			throughputMbps := throughput / 1e6                      // Convert to Megabits per second (Mbps)
+
+			if throughputMbps < 0.01 {
+				fmt.Printf("File %s uploaded in %.4f seconds. Throughput: %.6f Kbps\n", source, elapsedTime.Seconds(), throughput*8/1e3)
+			} else {
+				fmt.Printf("File %s uploaded in %.4f seconds. Throughput: %.6f Mbps\n", source, elapsedTime.Seconds(), throughputMbps)
+			}
+			fmt.Println("Current Time:", time.Now().Format("2006-01-02 15:04:05"))
+			fmt.Println()
+
+			//fmt.Printf("File %s uploaded in %v seconds. Throughput: %.2f Mbps\n", source, elapsedTime.Seconds(), throughputMbps)
+
+			err = UpdateDistributedFile_CheckFlagAndRemote(originalFileName, shardInfo.DistributedFile, true, shardInfo.Remote)
 			if err != nil {
 				fmt.Printf("UpdateDistributedFileCheckFlag 에러 : %v\n", err)
 			}
 
 			mu.Lock()
+			err = UpdateBoltzmannInfo(shardInfo.Remote, func(b *BoltzmannInfo) {
+				b.IncrementShardCount() // Increase shard count
+				//b.UpdateFileShardCount(shardInfo.DistributedFile, 1) // Track file shards
+				//b.UpdateRecentSpeed(throughputMbps, 5)               // Update recent throughput (Mbps)
+			})
+			mu.Unlock()
+
+			if err != nil {
+				fmt.Printf("Error updating BoltzmannInfo: %v\n", err)
+			}
+
 			// Erase Temp Shard
+			mu.Lock()
 			reedsolomon.DeleteShardWithFileNames([]string{hashedFileNameMap[shardInfo.DistributedFile]})
 			mu.Unlock()
 
-		}(shardInfo)
+		}(shardInfo, loadBalancer)
 	}
 
 	wg.Wait()
@@ -199,7 +228,6 @@ func startUploadFileGoroutine(originalFileName string, hashedFileNameMap map[str
 	if len(errs) > 0 {
 		return fmt.Errorf("errors occurred: %v", errs)
 	}
-	fmt.Println("NO errors occured!")
 	return nil
 }
 
