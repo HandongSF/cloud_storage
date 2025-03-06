@@ -2090,6 +2090,7 @@ func moveOrCopyFile(ctx context.Context, fdst fs.Fs, fsrc fs.Fs, dstFileName str
 			logger(ctx, MissingOnDst, dstObj, nil, nil)
 			dstObj = nil
 		}
+		
 
 		_, err = Op(ctx, fdst, dstObj, dstFileName, srcObj)
 	} else if !cp {
