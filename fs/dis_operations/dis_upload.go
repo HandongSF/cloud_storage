@@ -198,7 +198,7 @@ func startUploadFileGoroutine(originalFileName string, hashedFileNameMap map[str
 			throughput := float64(fileSize) / elapsedTime.Seconds() // Bytes per second
 			throughputKbps := throughput * 8 / 1e3                  //kbps
 
-			fmt.Printf("File %s uploaded in %.4f seconds. Throughput: %.6f Kbps\n", source, elapsedTime.Seconds(), throughputKbps)
+			//fmt.Printf("File %s uploaded in %.4f seconds. Throughput: %.6f Kbps\n", source, elapsedTime.Seconds(), throughputKbps)
 
 			mu.Lock()
 			totalThroughput += throughputKbps
