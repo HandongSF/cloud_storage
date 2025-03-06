@@ -148,6 +148,9 @@ func startUploadFileGoroutine(originalFileName string, hashedFileNameMap map[str
 	var errs []error
 	dir := GetShardPath()
 
+	var totalThroughput float64 // Accumulates total throughput
+	var fileCount int           // Counts number of uploaded files
+
 	for _, shardInfo := range distributedFileArray {
 		wg.Add(1)
 
@@ -159,7 +162,10 @@ func startUploadFileGoroutine(originalFileName string, hashedFileNameMap map[str
 			err := shardInfo.AllocateRemote(loadBalancer)
 			mu.Unlock()
 			if err != nil {
+				mu.Lock()
 				errs = append(errs, err)
+				mu.Unlock()
+				return
 			}
 
 			dest := fmt.Sprintf("%s:%s", shardInfo.Remote.Name, remoteDirectory)
@@ -170,7 +176,9 @@ func startUploadFileGoroutine(originalFileName string, hashedFileNameMap map[str
 			// Get the size of the file being uploaded
 			fileInfo, err := os.Stat(source)
 			if err != nil {
+				mu.Lock()
 				errs = append(errs, fmt.Errorf("error getting file info for %s: %w", source, err))
+				mu.Unlock()
 				return
 			}
 			fileSize := fileInfo.Size() // File size in bytes
@@ -179,35 +187,32 @@ func startUploadFileGoroutine(originalFileName string, hashedFileNameMap map[str
 			startTime := time.Now()
 			err = remoteCallCopy([]string{source, dest})
 			if err != nil {
+				mu.Lock()
 				errs = append(errs, fmt.Errorf("error in remoteCallCopy for file %s: %w", source, err))
+				mu.Unlock()
 				return
 			}
 			elapsedTime := time.Since(startTime)
 
-			// Calculate throughput: throughput = fileSize / elapsedTime
+			// Calculate throughput
 			throughput := float64(fileSize) / elapsedTime.Seconds() // Bytes per second
-			throughputMbps := throughput / 1e6                      // Convert to Megabits per second (Mbps)
+			throughputKbps := throughput * 8 / 1e3                  //kbps
 
-			if throughputMbps < 0.01 {
-				fmt.Printf("File %s uploaded in %.4f seconds. Throughput: %.6f Kbps\n", source, elapsedTime.Seconds(), throughput*8/1e3)
-			} else {
-				fmt.Printf("File %s uploaded in %.4f seconds. Throughput: %.6f Mbps\n", source, elapsedTime.Seconds(), throughputMbps)
-			}
-			fmt.Println("Current Time:", time.Now().Format("2006-01-02 15:04:05"))
-			fmt.Println()
+			fmt.Printf("File %s uploaded in %.4f seconds. Throughput: %.6f Kbps\n", source, elapsedTime.Seconds(), throughputKbps)
 
-			//fmt.Printf("File %s uploaded in %v seconds. Throughput: %.2f Mbps\n", source, elapsedTime.Seconds(), throughputMbps)
+			mu.Lock()
+			totalThroughput += throughputKbps
+			fileCount++
+			mu.Unlock()
 
 			err = UpdateDistributedFile_CheckFlagAndRemote(originalFileName, shardInfo.DistributedFile, true, shardInfo.Remote)
 			if err != nil {
-				fmt.Printf("UpdateDistributedFileCheckFlag 에러 : %v\n", err)
+				fmt.Printf("UpdateDistributedFileCheckFlag error: %v\n", err)
 			}
 
 			mu.Lock()
 			err = UpdateBoltzmannInfo(shardInfo.Remote, func(b *BoltzmannInfo) {
 				b.IncrementShardCount() // Increase shard count
-				//b.UpdateFileShardCount(shardInfo.DistributedFile, 1) // Track file shards
-				//b.UpdateRecentSpeed(throughputMbps, 5)               // Update recent throughput (Mbps)
 			})
 			mu.Unlock()
 
@@ -225,6 +230,13 @@ func startUploadFileGoroutine(originalFileName string, hashedFileNameMap map[str
 
 	wg.Wait()
 
+	if fileCount > 0 {
+		averageThroughput := totalThroughput / float64(fileCount)
+		fmt.Printf("Average Throughput: %f Kbps\n", averageThroughput)
+		fmt.Println("Current Time:", time.Now().Format("2006-01-02 15:04:05"))
+	} else {
+		fmt.Println("No files were uploaded, so average throughput cannot be calculated.")
+	}
 	if len(errs) > 0 {
 		return fmt.Errorf("errors occurred: %v", errs)
 	}
