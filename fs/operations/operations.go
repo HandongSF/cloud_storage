@@ -2103,7 +2103,11 @@ func moveOrCopyFile(ctx context.Context, fdst fs.Fs, fsrc fs.Fs, dstFileName str
 	}
 
 	elapsed := time.Since(start)
-	fmt.Printf("Time taken for copy cmd: %s, dstfileName: %s, srcfileName: %s\n", elapsed, dstFileName, srcFileName)
+	throughput := float64(srcObj.Size()) / elapsed.Seconds() / (1024 * 1024) // MB/s
+	currentTime := time.Now().Format("2006-01-02 15:04:05")
+
+	fmt.Printf("Time taken for copy cmd: %s, dstfileName: %s, srcfileName: %s, Throughput: %.2f MB/s, Current Time: %s\n",
+		elapsed, dstFileName, srcFileName, throughput, currentTime)
 
 	return err
 }
