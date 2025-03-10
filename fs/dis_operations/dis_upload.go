@@ -73,9 +73,16 @@ func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) err
 			return err
 		}
 	}
+
+	start := time.Now()
+
 	if err := startUploadFileGoroutine(originalFileName, hashedNamesMap, distributedFileArray, loadBalancer); err != nil {
 		return err
 	}
+
+	elapsed := time.Since(start)
+	fmt.Printf("Time taken for entire dis_upload: %s\n", elapsed)
+
 	if err := ResetCheckFlag(originalFileName); err != nil {
 		return err
 	}
@@ -205,12 +212,12 @@ func startUploadFileGoroutine(originalFileName string, hashedFileNameMap map[str
 			fileCount++
 			mu.Unlock()
 
+			mu.Lock()
 			err = UpdateDistributedFile_CheckFlagAndRemote(originalFileName, shardInfo.DistributedFile, true, shardInfo.Remote)
 			if err != nil {
 				fmt.Printf("UpdateDistributedFileCheckFlag error: %v\n", err)
 			}
 
-			mu.Lock()
 			err = UpdateBoltzmannInfo(shardInfo.Remote, func(b *BoltzmannInfo) {
 				b.IncrementShardCount() // Increase shard count
 			})
@@ -230,13 +237,11 @@ func startUploadFileGoroutine(originalFileName string, hashedFileNameMap map[str
 
 	wg.Wait()
 
-	if fileCount > 0 {
-		averageThroughput := totalThroughput / float64(fileCount)
-		fmt.Printf("Average Throughput: %f Kbps\n", averageThroughput)
-		fmt.Println("Current Time:", time.Now().Format("2006-01-02 15:04:05"))
-	} else {
-		fmt.Println("No files were uploaded, so average throughput cannot be calculated.")
-	}
+	averageThroughput := totalThroughput / float64(fileCount)
+
+	fmt.Printf("Average Throughput: %f Kbps\n", averageThroughput)
+	fmt.Println("Current Time:", time.Now().Format("2006-01-02 15:04:05"))
+
 	if len(errs) > 0 {
 		return fmt.Errorf("errors occurred: %v", errs)
 	}

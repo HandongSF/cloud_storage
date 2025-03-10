@@ -55,17 +55,16 @@ func Dis_rm(arg []string, reSignal bool) (err error) {
 	elapsed := time.Since(start)
 	fmt.Printf("Time taken for dis_rm: %s\n", elapsed)
 
-	// Reset flag of File
-	err = ResetCheckFlag(arg[0])
+	err = ResetCheckFlag(originalFileName)
 	if err != nil {
 		return err
 	}
-	err = RemoveFileFromMetadata(arg[0])
+	err = RemoveFileFromMetadata(originalFileName)
 	if err != nil {
 		return fmt.Errorf("failed to remove file from metadata: %v", err)
 	}
 
-	fmt.Printf("Successfully deleted all parts of %s and updated metadata.\n", arg[0])
+	fmt.Printf("Successfully deleted all parts of %s and updated metadata.\n", originalFileName)
 	//err = dis_config.SyncAllLocalToRemote(rclonePath)
 	//if err != nil {
 	//	return err
@@ -95,6 +94,15 @@ func startRmFileGoroutine(originalFileName string, distributedFileArray []Distri
 
 	remoteDirectory := "Distribution"
 	for _, info := range distributedFileArray {
+		if info.Remote.String() == "|" {
+			fmt.Printf("Empty Remote\n")
+			err = UpdateDistributedFile_CheckFlag(originalFileName, info.DistributedFile, true)
+			if err != nil {
+				fmt.Printf("UpdateDistributedFile_CheckFlag 에러 : %v\n", err)
+			}
+			continue
+		}
+
 		wg.Add(1)
 		go func(info DistributedFile) {
 			defer wg.Done()
