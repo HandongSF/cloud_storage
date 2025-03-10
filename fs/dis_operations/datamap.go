@@ -401,8 +401,9 @@ func GetUncompletedFileInfo(originalFileName string) ([]DistributedFile, error) 
 	}
 
 	var uncompleted []DistributedFile
+
 	for _, dFile := range fileInfo.DistributedFileInfos {
-		if !dFile.Check {
+		if !dFile.Check && dFile.Remote.String() != "|" {
 			uncompleted = append(uncompleted, dFile)
 		}
 	}
