@@ -22,14 +22,13 @@ const (
 	RoundRobin       LoadBalancerType = "RoundRobin"
 	LeastDistributed LoadBalancerType = "LeastDistributed"
 	ResourceBased    LoadBalancerType = "ResourceBased"
-	Boltzmann        LoadBalancerType = "Boltzmann"
 	None             LoadBalancerType = "None" // Invalid value
 )
 
 // Validate the input for load balancer
 func (lb LoadBalancerType) IsValid() bool {
 	switch lb {
-	case RoundRobin, LeastDistributed, ResourceBased, Boltzmann:
+	case RoundRobin, LeastDistributed, ResourceBased:
 		return true
 	default:
 		return false
@@ -59,7 +58,7 @@ func LoadBalancer_RoundRobin() (Remote, error) {
 }
 
 func LoadBalancer_LeastDistributed() (Remote, error) {
-	remote := getRemoteOfSmallestShardCount()
+	remote := getRemoteOfHighestThroughput()
 
 	return remote, nil
 }
@@ -110,7 +109,6 @@ func LoadBalancer_ResourceBased() (Remote, error) {
 	}
 
 	bestRemote_save = bestRemote
-
 	return bestRemote, nil
 }
 
@@ -131,22 +129,21 @@ func IncrementRoundRobinCounter() error {
 	return writeJSON(jsonFilePath, existingLBInfo)
 }
 
-func UpdateBoltzmannInfo(remote Remote, updateFunc func(*BoltzmannInfo)) error {
+func UpdateRemoteInfo(remote Remote, updateFunc func(*RemoteInfo)) error {
 	jsonFilePath := getLoadBalancerJsonFilePath()
 	lbInfo, err := getLoadBalancerInfo(jsonFilePath)
 	if err != nil {
 		return err
 	}
 
-	// Get or initialize BoltzmannInfo (use pointer to it)
-	boltzmannInfo := getBoltzmannInfo(remote, lbInfo)
+	// Get or initialize RemoteInfo (use pointer to it)
+	remoteInfo := getRemoteInfo(remote, lbInfo)
 
 	// Apply the provided update function
-	updateFunc(&boltzmannInfo)
-	//boltzmannInfo.PrintInfo()
+	updateFunc(&remoteInfo)
 
 	// Since the map stores struct values, we must explicitly update it
-	lbInfo.RemoteBoltzmannInfos[remote.String()] = boltzmannInfo
+	lbInfo.RemoteInfos[remote.String()] = remoteInfo
 
 	// Write updated info back to JSON
 	err = writeJSON(jsonFilePath, lbInfo)
@@ -183,8 +180,8 @@ func getLoadBalancerJsonFilePath() string {
 
 		// Initialize LoadBalancerInfo with default values
 		lbInfo := LoadBalancerInfo{
-			RoundRobinCounter:    0,
-			RemoteBoltzmannInfos: make(map[string]BoltzmannInfo),
+			RoundRobinCounter: 0,
+			RemoteInfos:       make(map[string]RemoteInfo),
 		}
 
 		// Marshal the LoadBalancerInfo struct to JSON format
@@ -247,61 +244,58 @@ func getLoadBalancerInfo(jsonFilePath string) (*LoadBalancerInfo, error) {
 	return existingLBInfo, nil
 }
 
-func getBoltzmannInfo(remote Remote, loadBalancerInfo *LoadBalancerInfo) BoltzmannInfo {
-	if loadBalancerInfo.RemoteBoltzmannInfos == nil {
-		loadBalancerInfo.RemoteBoltzmannInfos = make(map[string]BoltzmannInfo)
+func getRemoteInfo(remote Remote, loadBalancerInfo *LoadBalancerInfo) RemoteInfo {
+	if loadBalancerInfo.RemoteInfos == nil {
+		loadBalancerInfo.RemoteInfos = make(map[string]RemoteInfo)
 	}
 
 	remoteKey := remote.String()
 
-	// Retrieve the BoltzmannInfoData for the given remote
-	boltzmannInfo, exists := loadBalancerInfo.RemoteBoltzmannInfos[remoteKey]
+	// Retrieve the RemoteInfoData for the given remote
+	remoteInfo, exists := loadBalancerInfo.RemoteInfos[remoteKey]
 
 	// If the data does not exist, create a new one
 	if !exists {
-		boltzmannInfo = BoltzmannInfo{
-			//RecentSpeeds:   []float64{},
-			//MaxSpeed:       0,
-			ShardCount: 0,
-			//FileShardCount: make(map[string]int),
-			//Penalty:        0,
+		remoteInfo = RemoteInfo{
+			UpThroughputHistory: []float64{},
+			AvgUpThroughput:     0,
 		}
 	}
 
 	// Since the map stores struct values, we must explicitly update it
-	loadBalancerInfo.RemoteBoltzmannInfos[remoteKey] = boltzmannInfo
+	loadBalancerInfo.RemoteInfos[remoteKey] = remoteInfo
 
 	// Return a pointer to the map entry (modifications will persist)
-	return loadBalancerInfo.RemoteBoltzmannInfos[remoteKey]
+	return loadBalancerInfo.RemoteInfos[remoteKey]
 }
 
-func getRemoteOfSmallestShardCount() Remote {
+func getRemoteOfHighestThroughput() Remote {
 	jsonFilePath := getLoadBalancerJsonFilePath()
 	existingLBInfo, err := readJSON(jsonFilePath)
 	if err != nil {
 		return Remote{}
 	}
 
-	var minKey string
-	var minValue int
+	var maxKey string
+	var maxValue int
 	firstIteration := true
 
-	// Find the remote with the smallest shard count
-	for key, value := range existingLBInfo.RemoteBoltzmannInfos {
-		if firstIteration || value.ShardCount < minValue {
-			minValue = value.ShardCount
-			minKey = key
+	// Find the remote with the highest average throughput
+	for key, value := range existingLBInfo.RemoteInfos {
+		if firstIteration || int(value.AvgUpThroughput) > maxValue {
+			maxValue = int(value.AvgUpThroughput)
+			maxKey = key
 			firstIteration = false
 		}
 	}
 
 	// Handle empty counter case
-	if minKey == "" {
+	if maxKey == "" {
 		return Remote{} // Return an empty Remote struct if the map is empty
 	}
 
 	// Split the key back into Name and Type
-	parts := strings.Split(minKey, "|")
+	parts := strings.Split(maxKey, "|")
 	if len(parts) != 2 {
 		return Remote{}
 	}
