@@ -88,7 +88,6 @@ func remoteCallDeleteFile(args []string) (err error) {
 }
 
 func startRmFileGoroutine(originalFileName string, distributedFileArray []DistributedFile) (err error) {
-	var mu sync.Mutex
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(distributedFileArray))
 
@@ -125,16 +124,8 @@ func startRmFileGoroutine(originalFileName string, distributedFileArray []Distri
 				fmt.Printf("UpdateDistributedFile_CheckFlag 에러 : %v\n", err)
 			}
 
-			// Update BoltzmannInfo in a thread-safe manner
-			mu.Lock()
-			err = UpdateBoltzmannInfo(info.Remote, func(b *BoltzmannInfo) {
-				b.DecrementShardCount()
-				//b.UpdateFileShardCount(info.DistributedFile, -1)
-			})
-			mu.Unlock()
-
 			if err != nil {
-				errCh <- fmt.Errorf("error updating boltzmann info: %v", err)
+				errCh <- fmt.Errorf("error updating remote info: %v", err)
 			}
 		}(info)
 	}
