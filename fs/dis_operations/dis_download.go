@@ -15,6 +15,24 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var copyCommandDefinitionForDown = &cobra.Command{
+	Use: "copy source:path dest:path",
+	Annotations: map[string]string{
+		"groups": "Copy,Filter,Listing,Important",
+	},
+	Run: func(command *cobra.Command, args []string) {
+		cmd.CheckArgs(2, 2, command, args)
+		fsrc, srcFileName, fdst := cmd.NewFsSrcFileDst(args)
+		cmd.RunWithSustainOS(true, true, command, func() error {
+			if srcFileName == "" {
+				fmt.Printf("%s is a directory or doesn't exist\n", args[0])
+				return nil
+			}
+			return operations.CopyFile(context.Background(), fdst, fsrc, srcFileName, srcFileName)
+		}, true)
+	},
+}
+
 func Dis_Download(args []string, reSignal bool) (err error) {
 
 	//rclonePath := GetRcloneDirPath()
@@ -24,7 +42,9 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 	// if err != nil {
 	// 	return err
 	// }
-	_, err = GetFileInfoStruct(args[0])
+
+	originalFileName := filepath.Base(args[0])
+	_, err = GetFileInfoStruct(originalFileName)
 	if err != nil {
 		return err
 	}
@@ -34,25 +54,28 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 
 	if reSignal {
 		//Get Distribution list(Check 읽어서 false인 것만 들고 오기)
-		distributedFileInfos, err = GetUncompletedFileInfo(args[0])
+		distributedFileInfos, err = GetUncompletedFileInfo(originalFileName)
 		if err != nil {
 			return err
 		}
 
 	} else {
 		//state 변경
-		err = UpdateFileFlag(args[0], "download")
+		err = UpdateFileFlag(originalFileName, "download")
 		if err != nil {
 			return err
 		}
-		distributedFileInfos, err = GetDistributedFileStruct(args[0])
+		distributedFileInfos, err = GetDistributedFileStruct(originalFileName)
 		if err != nil {
 			return err
 		}
 	}
 
 	start := time.Now()
-	startDownloadFileGoroutine(distributedFileInfos)
+	startDownloadFileGoroutine(distributedFileInfos, originalFileName)
+
+	//startDownloadFileWorkerPool(distributedFileInfos)
+
 	elapsed := time.Since(start)
 	fmt.Printf("Time taken for dis_download: %s\n", elapsed)
 
@@ -62,7 +85,7 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 	}
 
 	// Move downloaded file to destination
-	fileInfo, err := GetFileInfoStruct(args[0])
+	fileInfo, err := GetFileInfoStruct(originalFileName)
 	if err != nil {
 		return err
 	}
@@ -72,11 +95,11 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 		checksums[each.DistributedFile] = each.Checksum
 	}
 
-	err = reedsolomon.DoDecode(args[0], absolutePath, fileInfo.Padding, checksums)
+	err = reedsolomon.DoDecode(originalFileName, absolutePath, fileInfo.Padding, checksums)
 	if err != nil {
-		result := ShowDescription_RemoveFile(args[0], err)
+		result := ShowDescription_RemoveFile(originalFileName, err)
 		if result {
-			err = Dis_rm([]string{args[0]}, false)
+			err = Dis_rm([]string{originalFileName}, false)
 			if err != nil {
 				return err
 			}
@@ -98,8 +121,7 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 	return nil
 }
 
-func startDownloadFileGoroutine(distributedFileInfos []DistributedFile) (err error) {
-
+func startDownloadFileGoroutine(distributedFileInfos []DistributedFile, originalFileName string) (err error) {
 	shardDir, err := reedsolomon.GetShardDir()
 	if err != nil {
 		return err
@@ -110,52 +132,14 @@ func startDownloadFileGoroutine(distributedFileInfos []DistributedFile) (err err
 	var errs []error
 
 	for _, fileInfo := range distributedFileInfos {
-
 		wg.Add(1)
 		go func(fileInfo DistributedFile) {
 			defer wg.Done()
-
-			hashedFileName, err := CalculateHash(fileInfo.DistributedFile)
-			if err != nil {
+			if err := downloadFile(fileInfo, shardDir, originalFileName, &mu, &errs); err != nil {
 				mu.Lock()
-				errs = append(errs, fmt.Errorf("CalculateHash for %s: %w", fileInfo.DistributedFile, err))
+				errs = append(errs, err)
 				mu.Unlock()
-				return
 			}
-
-			source := fmt.Sprintf("%s:%s/%s", fileInfo.Remote.Name, remoteDirectory, hashedFileName)
-			fmt.Printf("Downloading shard %s to %s\n", source, shardDir)
-			downloadedFilePath := path.Join(shardDir, hashedFileName)
-
-			if err := remoteCallCopyforDown([]string{source, shardDir}); err != nil {
-				mu.Lock()
-				errs = append(errs, fmt.Errorf("remoteCallCopyforDown for %s: %w", fileInfo.DistributedFile, err))
-				mu.Unlock()
-				return
-			}
-
-			// Check if the file exists before renaming
-			if _, err := os.Stat(downloadedFilePath); os.IsNotExist(err) {
-				mu.Lock()
-				errs = append(errs, fmt.Errorf("downloaded file %s does not exist", downloadedFilePath))
-				mu.Unlock()
-				return
-			}
-
-			if err := ConvertFileNameForDo(hashedFileName, fileInfo.DistributedFile); err != nil {
-				mu.Lock()
-				errs = append(errs, fmt.Errorf("ConvertFileNameForDo for %s: %w", fileInfo.DistributedFile, err))
-				mu.Unlock()
-				return
-			}
-
-			if err := UpdateDistributedFile_CheckFlag(fileInfo.DistributedFile, fileInfo.DistributedFile, true); err != nil {
-				mu.Lock()
-				errs = append(errs, fmt.Errorf("UpdateDistributedFileCheckFlag for %s: %w", fileInfo.DistributedFile, err))
-				mu.Unlock()
-				return
-			}
-
 		}(fileInfo)
 	}
 
@@ -165,6 +149,71 @@ func startDownloadFileGoroutine(distributedFileInfos []DistributedFile) (err err
 		return fmt.Errorf("errors occurred during download: %v", errs)
 	}
 
+	return nil
+}
+
+func downloadFile(fileInfo DistributedFile, shardDir, originalFileName string, mu *sync.Mutex, errs *[]error) error {
+	startTime := time.Now()
+
+	hashedFileName, err := CalculateHash(fileInfo.DistributedFile)
+	if err != nil {
+		mu.Lock()
+		*errs = append(*errs, fmt.Errorf("CalculateHash for %s: %w", fileInfo.DistributedFile, err))
+		mu.Unlock()
+		return err
+	}
+
+	source := fmt.Sprintf("%s:%s/%s", fileInfo.Remote.Name, remoteDirectory, hashedFileName)
+	fmt.Printf("Downloading shard %s to %s\n", source, shardDir)
+	downloadedFilePath := path.Join(shardDir, hashedFileName)
+
+	if err := remoteCallCopyforDown([]string{source, shardDir}); err != nil {
+		mu.Lock()
+		*errs = append(*errs, fmt.Errorf("remoteCallCopyforDown for %s: %w", fileInfo.DistributedFile, err))
+		mu.Unlock()
+		return err
+	}
+
+	elapsedTime := time.Since(startTime)
+	downloadedFile, err := os.Stat(downloadedFilePath)
+	if err != nil {
+		mu.Lock()
+		*errs = append(*errs, fmt.Errorf("downloaded file %s does not exist", downloadedFilePath))
+		mu.Unlock()
+		return err
+	}
+
+	// Calculate throughput
+	throughput := float64(downloadedFile.Size()) / elapsedTime.Seconds()
+	throughputKbps := throughput * 8 / 1e3
+
+	if err := ConvertFileNameForDo(hashedFileName, fileInfo.DistributedFile); err != nil {
+		return fmt.Errorf("ConvertFileNameForDo for %s: %w", fileInfo.DistributedFile, err)
+	}
+
+	// Update remote info
+	err = updateRemoteInfo_Down(originalFileName, fileInfo, throughputKbps, mu)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func updateRemoteInfo_Down(originalFileName string, shardInfo DistributedFile, throughputKbps float64, mu *sync.Mutex) error {
+	mu.Lock()
+	err := UpdateDistributedFile_CheckFlag(originalFileName, shardInfo.DistributedFile, true)
+	if err != nil {
+		mu.Unlock()
+		return fmt.Errorf("UpdateDistributedFileCheckFlag error: %v", err)
+	}
+	err = UpdateRemoteInfo(shardInfo.Remote, func(b *RemoteInfo) {
+		b.UpdateThroughput(throughputKbps, 1)
+	})
+	mu.Unlock()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -199,22 +248,4 @@ func remoteCallCopyforDown(args []string) (err error) {
 	}
 
 	return nil
-}
-
-var copyCommandDefinitionForDown = &cobra.Command{
-	Use: "copy source:path dest:path",
-	Annotations: map[string]string{
-		"groups": "Copy,Filter,Listing,Important",
-	},
-	Run: func(command *cobra.Command, args []string) {
-		cmd.CheckArgs(2, 2, command, args)
-		fsrc, srcFileName, fdst := cmd.NewFsSrcFileDst(args)
-		cmd.RunWithSustainOS(true, true, command, func() error {
-			if srcFileName == "" {
-				fmt.Printf("%s is a directory or doesn't exist\n", args[0])
-				return nil
-			}
-			return operations.CopyFile(context.Background(), fdst, fsrc, srcFileName, srcFileName)
-		}, true)
-	},
 }
