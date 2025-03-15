@@ -18,6 +18,27 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	createEmptySrcDirs = false
+)
+
+var copyCommandDefinition = &cobra.Command{
+	Use: "copy source:path dest:path",
+	Annotations: map[string]string{
+		"groups": "Copy,Filter,Listing,Important",
+	},
+	Run: func(command *cobra.Command, args []string) {
+		cmd.CheckArgs(2, 2, command, args)
+		fsrc, srcFileName, fdst := cmd.NewFsSrcFileDst(args)
+		cmd.RunWithSustainOS(true, true, command, func() error {
+			if srcFileName == "" {
+				return rsync.CopyDir(context.Background(), fdst, fsrc, createEmptySrcDirs)
+			}
+			return operations.CopyFile(context.Background(), fdst, fsrc, srcFileName, srcFileName)
+		}, true)
+	},
+}
+
 func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) error {
 	absolutePath, err := dis_init(args[0])
 	if err != nil {
@@ -149,6 +170,69 @@ func prepareUpload(absolutePath string) (hashNameMap map[string]string, distribu
 	return hashNameMap, distributedFileInfos, nil
 }
 
+func uploadFile(source, dest string, mu *sync.Mutex, totalThroughput *float64, fileCount *int, errs *[]error, originalFileName string, shardInfo DistributedFile, hashedFileNameMap map[string]string) error {
+	// Get file info
+	fileInfo, err := os.Stat(source)
+	if err != nil {
+		mu.Lock()
+		*errs = append(*errs, fmt.Errorf("error getting file info for %s: %w", source, err))
+		mu.Unlock()
+		return err
+	}
+	fileSize := fileInfo.Size()
+
+	// Measure time for upload
+	startTime := time.Now()
+	err = remoteCallCopy([]string{source, dest})
+	if err != nil {
+		mu.Lock()
+		*errs = append(*errs, fmt.Errorf("error in remoteCallCopy for file %s: %w", source, err))
+		mu.Unlock()
+		return err
+	}
+	elapsedTime := time.Since(startTime)
+
+	// Calculate throughput
+	throughput := float64(fileSize) / elapsedTime.Seconds()
+	throughputKbps := throughput * 8 / 1e3
+
+	// Update throughput and file count
+	mu.Lock()
+	*totalThroughput += throughputKbps
+	*fileCount++
+	mu.Unlock()
+
+	// Update remote info
+	err = updateRemoteInfo_Up(originalFileName, shardInfo, throughputKbps, mu)
+	if err != nil {
+		return err
+	}
+
+	// Erase temp shard
+	mu.Lock()
+	reedsolomon.DeleteShardWithFileNames([]string{hashedFileNameMap[shardInfo.DistributedFile]})
+	mu.Unlock()
+
+	return nil
+}
+
+func updateRemoteInfo_Up(originalFileName string, shardInfo DistributedFile, throughputKbps float64, mu *sync.Mutex) error {
+	mu.Lock()
+	err := UpdateDistributedFile_CheckFlagAndRemote(originalFileName, shardInfo.DistributedFile, true, shardInfo.Remote)
+	if err != nil {
+		mu.Unlock()
+		return fmt.Errorf("UpdateDistributedFileCheckFlag error: %v", err)
+	}
+	err = UpdateRemoteInfo(shardInfo.Remote, func(b *RemoteInfo) {
+		b.UpdateThroughput(throughputKbps, 0)
+	})
+	mu.Unlock()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func startUploadFileGoroutine(originalFileName string, hashedFileNameMap map[string]string, distributedFileArray []DistributedFile, loadBalancer LoadBalancerType) (err error) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -176,61 +260,15 @@ func startUploadFileGoroutine(originalFileName string, hashedFileNameMap map[str
 			}
 
 			dest := fmt.Sprintf("%s:%s", shardInfo.Remote.Name, remoteDirectory)
-			fmt.Printf("Uploading file %s to %s\n", hashedFileNameMap[shardInfo.DistributedFile], dest)
-
 			source := filepath.Join(dir, hashedFileNameMap[shardInfo.DistributedFile])
 
-			// Get the size of the file being uploaded
-			fileInfo, err := os.Stat(source)
+			// Upload file and calculate throughput
+			err = uploadFile(source, dest, &mu, &totalThroughput, &fileCount, &errs, originalFileName, shardInfo, hashedFileNameMap)
 			if err != nil {
 				mu.Lock()
-				errs = append(errs, fmt.Errorf("error getting file info for %s: %w", source, err))
+				errs = append(errs, err)
 				mu.Unlock()
-				return
 			}
-			fileSize := fileInfo.Size() // File size in bytes
-
-			// Start measuring time for throughput calculation
-			startTime := time.Now()
-			err = remoteCallCopy([]string{source, dest})
-			if err != nil {
-				mu.Lock()
-				errs = append(errs, fmt.Errorf("error in remoteCallCopy for file %s: %w", source, err))
-				mu.Unlock()
-				return
-			}
-			elapsedTime := time.Since(startTime)
-
-			// Calculate throughput
-			throughput := float64(fileSize) / elapsedTime.Seconds() // Bytes per second
-			throughputKbps := throughput * 8 / 1e3                  //kbps
-
-			//fmt.Printf("File %s uploaded in %.4f seconds. Throughput: %.6f Kbps\n", source, elapsedTime.Seconds(), throughputKbps)
-
-			mu.Lock()
-			totalThroughput += throughputKbps
-			fileCount++
-			mu.Unlock()
-
-			mu.Lock()
-			err = UpdateDistributedFile_CheckFlagAndRemote(originalFileName, shardInfo.DistributedFile, true, shardInfo.Remote)
-			if err != nil {
-				fmt.Printf("UpdateDistributedFileCheckFlag error: %v\n", err)
-			}
-
-			err = UpdateBoltzmannInfo(shardInfo.Remote, func(b *BoltzmannInfo) {
-				b.IncrementShardCount() // Increase shard count
-			})
-			mu.Unlock()
-
-			if err != nil {
-				fmt.Printf("Error updating BoltzmannInfo: %v\n", err)
-			}
-
-			// Erase Temp Shard
-			mu.Lock()
-			reedsolomon.DeleteShardWithFileNames([]string{hashedFileNameMap[shardInfo.DistributedFile]})
-			mu.Unlock()
 
 		}(shardInfo, loadBalancer)
 	}
@@ -290,25 +328,12 @@ func remoteCallCopy(args []string) (err error) {
 	return nil
 }
 
-var (
-	createEmptySrcDirs = false
-)
-
-var copyCommandDefinition = &cobra.Command{
-	Use: "copy source:path dest:path",
-	Annotations: map[string]string{
-		"groups": "Copy,Filter,Listing,Important",
-	},
-	Run: func(command *cobra.Command, args []string) {
-		cmd.CheckArgs(2, 2, command, args)
-		fsrc, srcFileName, fdst := cmd.NewFsSrcFileDst(args)
-		cmd.RunWithSustainOS(true, true, command, func() error {
-			if srcFileName == "" {
-				return rsync.CopyDir(context.Background(), fdst, fsrc, createEmptySrcDirs)
-			}
-			return operations.CopyFile(context.Background(), fdst, fsrc, srcFileName, srcFileName)
-		}, true)
-	},
+func logThroughput(totalThroughput float64, fileCount int) {
+	if fileCount > 0 {
+		averageThroughput := totalThroughput / float64(fileCount)
+		fmt.Printf("Average Throughput: %f Kbps\n", averageThroughput)
+	}
+	fmt.Println("Current Time:", time.Now().Format("2006-01-02 15:04:05"))
 }
 
 func remoteCallMkdir(args []string) (err error) {
