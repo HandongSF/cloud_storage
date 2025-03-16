@@ -6,6 +6,15 @@ import (
 
 var remoteDirectory = "Distribution"
 
+const maxEntries = 10
+
+type ThroughputType int
+
+const (
+	Upload ThroughputType = iota
+	Download
+)
+
 // The Top Data Structure
 type FileInfo struct {
 	FileName             string                     `json:"original_file_name"`
@@ -30,74 +39,60 @@ type Remote struct {
 	Type string `json:"remote_type"`
 }
 
-type BoltzmannInfo struct {
-	//RecentSpeeds   []float64      `json:"recent_speeds"` // Stores recent upload speeds (e.g., last 5 uploads)
-	//MaxSpeed       float64        `json:"max_speed"`     // Maximum observed throughput (moving average)
-	ShardCount int `json:"shard_count"`
-	//FileShardCount map[string]int `json:"file_shard_count"` // Tracks shard concentration per file
-	//Penalty        float64        `json:"penalty"`          // Penalty factor for unsafe conditions
+type RemoteInfo struct {
+	UpThroughputHistory   []float64 `json:"upload_throughput_history"`
+	AvgUpThroughput       float64   `json:"average_upload_throughput"`
+	DownThroughputHistory []float64 `json:"download_throughput_history"`
+	AvgDownThroughput     float64   `json:"average_download_throughput"`
 }
 
 type LoadBalancerInfo struct {
-	RoundRobinCounter    int                      `json:"RoundRobin_Counter"`
-	RemoteBoltzmannInfos map[string]BoltzmannInfo `json:"Remote_Bolzmann_Info"`
+	RoundRobinCounter int                   `json:"RoundRobin_Counter"`
+	RemoteInfos       map[string]RemoteInfo `json:"Remote_Info"`
 }
 
 func (r Remote) String() string {
 	return fmt.Sprintf("%s|%s", r.Name, r.Type) // Use a separator to avoid conflicts
 }
 
-func (b *BoltzmannInfo) IncrementShardCount() {
-	b.ShardCount++
-}
+func (b *RemoteInfo) UpdateThroughput(newSpeed float64, tType ThroughputType) {
+	var history *[]float64
+	var avgThroughput *float64
 
-func (b *BoltzmannInfo) DecrementShardCount() {
-	if b.ShardCount > 0 {
-		b.ShardCount--
+	// Select appropriate history and average throughput based on type
+	switch tType {
+	case Upload:
+		history = &b.UpThroughputHistory
+		avgThroughput = &b.AvgUpThroughput
+	case Download:
+		history = &b.DownThroughputHistory
+		avgThroughput = &b.AvgDownThroughput
 	}
+
+	// Append new speed
+	*history = append(*history, newSpeed)
+
+	// Keep only the last `maxEntries` speeds
+	if len(*history) > maxEntries {
+		*history = (*history)[len(*history)-maxEntries:]
+	}
+
+	// Update max speed
+	*avgThroughput = maxSpeed(*history)
 }
 
-// func (b *BoltzmannInfo) UpdateRecentSpeed(newSpeed float64, maxEntries int) {
-// 	b.RecentSpeeds = append(b.RecentSpeeds, newSpeed)
-
-// 	// Keep only the last `maxEntries` speeds
-// 	if len(b.RecentSpeeds) > maxEntries {
-// 		b.RecentSpeeds = b.RecentSpeeds[len(b.RecentSpeeds)-maxEntries:]
-// 	}
-
-// 	b.UpdateMaxSpeed()
-// }
-
-// func (b *BoltzmannInfo) UpdateMaxSpeed() {
-// 	if len(b.RecentSpeeds) == 0 {
-// 		b.MaxSpeed = 0
-// 		return
-// 	}
-
-// 	// Find the maximum speed
-// 	max := b.RecentSpeeds[0]
-// 	for _, speed := range b.RecentSpeeds {
-// 		if speed > max {
-// 			max = speed
-// 		}
-// 	}
-// 	b.MaxSpeed = max
-// }
-
-// func (b *BoltzmannInfo) UpdateFileShardCount(file string, count int) {
-// 	if b.FileShardCount == nil {
-// 		b.FileShardCount = make(map[string]int)
-// 	}
-// 	b.FileShardCount[file] += count
-// }
-
-// func (b *BoltzmannInfo) RemoveFileShard(file string) {
-// 	delete(b.FileShardCount, file)
-// }
-
-// func (b *BoltzmannInfo) ApplyPenalty(penaltyAmount float64) {
-// 	b.Penalty += penaltyAmount
-// }
+func maxSpeed(history []float64) float64 {
+	if len(history) == 0 {
+		return 0
+	}
+	max := history[0]
+	for _, speed := range history {
+		if speed > max {
+			max = speed
+		}
+	}
+	return max
+}
 
 func (distributionFile *DistributedFile) AllocateRemote(loadbalancer LoadBalancerType) error {
 	var remote Remote
@@ -118,15 +113,13 @@ func (distributionFile *DistributedFile) AllocateRemote(loadbalancer LoadBalance
 		return err
 	}
 	distributionFile.Remote = remote
+	fmt.Println("Allocated Remote: ", remote)
+
 	return nil
 }
 
-func (boltzmannInfo *BoltzmannInfo) PrintInfo() {
+func (boltzmannInfo *RemoteInfo) PrintInfo() {
 	fmt.Println()
-	//fmt.Printf("Max Speed: %f\n", boltzmannInfo.MaxSpeed)
-	fmt.Printf("Shard Count: %d\n", boltzmannInfo.ShardCount)
-	//fmt.Printf("Penalty: %f\n", boltzmannInfo.Penalty)
-	//fmt.Println("Recent Speeds:", boltzmannInfo.RecentSpeeds)
-	//fmt.Println("File Shard Count:", boltzmannInfo.FileShardCount)
+	fmt.Printf("Average Throughput: %f\n", boltzmannInfo.AvgUpThroughput)
 	fmt.Println()
 }
