@@ -14,18 +14,18 @@ func init() {
 
 var commandDefinition = &cobra.Command{
 	Use:   "dis_config",
-	Short: "Upload the distributed config files after sync",
-	Long: `Performs remote→local sync and then executes the upload operation,
-followed by local→remote sync to update changes on the remote.
+	Short: "saving rclone config file at rclone dir",
+	Long: `saving rclone config file that is saved user's driver at rclone dir
 
 Example:
 
-    $ rclone dis_upload
+    $ rclone dis_config path
 
 This command calls the internal Config_upload function to perform the process.`,
 	Run: func(command *cobra.Command, args []string) {
+		cmd.CheckArgs(1, 1, command, args)
 		cmd.Run(true, true, command, func() error {
-			err := dis_config.Config_upload()
+			err := dis_config.Config_upload(args)
 			if err != nil {
 				return fmt.Errorf("error during dis_upload: %v", err)
 			}
