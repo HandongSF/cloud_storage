@@ -14,7 +14,7 @@ var loadBalancer LoadBalancerFlag
 func init() {
 	cmd.Root.AddCommand(commandDefinition)
 	loadBalancer.Value = dis_operations.RoundRobin // Default value
-	commandDefinition.Flags().VarP(&loadBalancer, "loadbalancer", "b", "Load balancing strategy (RoundRobin, LeastConnections,ResourceBased)")
+	commandDefinition.Flags().VarP(&loadBalancer, "loadbalancer", "b", "Load balancing strategy (RoundRobin, DownloadOptima, UploadOptima, ResourceBased)")
 }
 
 var commandDefinition = &cobra.Command{
