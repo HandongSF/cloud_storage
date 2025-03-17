@@ -101,8 +101,10 @@ func (distributionFile *DistributedFile) AllocateRemote(loadbalancer LoadBalance
 	switch loadbalancer {
 	case RoundRobin:
 		remote, err = LoadBalancer_RoundRobin()
-	case LeastDistributed:
-		remote, err = LoadBalancer_LeastDistributed()
+	case DownloadOptima:
+		remote, err = LoadBalancer_DownloadOptima()
+	case UploadOptima:
+		remote, err = LoadBalancer_UploadOptima()
 	case ResourceBased:
 		remote, err = LoadBalancer_ResourceBased()
 	default:
@@ -113,8 +115,6 @@ func (distributionFile *DistributedFile) AllocateRemote(loadbalancer LoadBalance
 		return err
 	}
 	distributionFile.Remote = remote
-	fmt.Println("Allocated Remote: ", remote)
-
 	return nil
 }
 

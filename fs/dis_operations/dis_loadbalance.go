@@ -19,16 +19,17 @@ import (
 type LoadBalancerType string
 
 const (
-	RoundRobin       LoadBalancerType = "RoundRobin"
-	LeastDistributed LoadBalancerType = "LeastDistributed"
-	ResourceBased    LoadBalancerType = "ResourceBased"
-	None             LoadBalancerType = "None" // Invalid value
+	RoundRobin     LoadBalancerType = "RoundRobin"
+	DownloadOptima LoadBalancerType = "DownloadOptima"
+	UploadOptima   LoadBalancerType = "UploadOptima"
+	ResourceBased  LoadBalancerType = "ResourceBased"
+	None           LoadBalancerType = "None" // Invalid value
 )
 
 // Validate the input for load balancer
 func (lb LoadBalancerType) IsValid() bool {
 	switch lb {
-	case RoundRobin, LeastDistributed, ResourceBased:
+	case RoundRobin, DownloadOptima, UploadOptima, ResourceBased:
 		return true
 	default:
 		return false
@@ -57,9 +58,22 @@ func LoadBalancer_RoundRobin() (Remote, error) {
 	return selectedRemoteObj, nil
 }
 
-func LoadBalancer_LeastDistributed() (Remote, error) {
-	remote := getRemoteOfHighestThroughput()
+func LoadBalancer_DownloadOptima() (Remote, error) {
+	remote, err := getRemoteOfHighestDownThroughput()
+	fmt.Println("Download Optima: ", remote)
 
+	if err != nil {
+		return Remote{}, err
+	}
+	return remote, nil
+}
+
+func LoadBalancer_UploadOptima() (Remote, error) {
+	remote, err := getRemoteOfHighestUpThroughput()
+	fmt.Println("Upload Optima: ", remote)
+	if err != nil {
+		return Remote{}, err
+	}
 	return remote, nil
 }
 
@@ -269,21 +283,37 @@ func getRemoteInfo(remote Remote, loadBalancerInfo *LoadBalancerInfo) RemoteInfo
 	return loadBalancerInfo.RemoteInfos[remoteKey]
 }
 
-func getRemoteOfHighestThroughput() Remote {
+func getRemoteOfHighestUpThroughput() (Remote, error) {
+	return getRemoteOfHighestThroughput(func(info RemoteInfo) float64 {
+		return info.AvgUpThroughput
+	})
+}
+
+func getRemoteOfHighestDownThroughput() (Remote, error) {
+	return getRemoteOfHighestThroughput(func(info RemoteInfo) float64 {
+		return info.AvgDownThroughput
+	})
+}
+
+func getRemoteOfHighestThroughput(selector func(RemoteInfo) float64) (Remote, error) {
 	jsonFilePath := getLoadBalancerJsonFilePath()
 	existingLBInfo, err := readJSON(jsonFilePath)
 	if err != nil {
-		return Remote{}
+		return LoadBalancer_RoundRobin()
 	}
 
 	var maxKey string
-	var maxValue int
+	var maxValue float64
 	firstIteration := true
 
 	// Find the remote with the highest average throughput
 	for key, value := range existingLBInfo.RemoteInfos {
-		if firstIteration || int(value.AvgUpThroughput) > maxValue {
-			maxValue = int(value.AvgUpThroughput)
+		currentVal := selector(value)
+		if currentVal == 0 {
+			continue
+		}
+		if firstIteration || currentVal > maxValue {
+			maxValue = currentVal
 			maxKey = key
 			firstIteration = false
 		}
@@ -291,19 +321,19 @@ func getRemoteOfHighestThroughput() Remote {
 
 	// Handle empty counter case
 	if maxKey == "" {
-		return Remote{} // Return an empty Remote struct if the map is empty
+		return LoadBalancer_RoundRobin()
 	}
 
 	// Split the key back into Name and Type
 	parts := strings.Split(maxKey, "|")
 	if len(parts) != 2 {
-		return Remote{}
+		return LoadBalancer_RoundRobin()
 	}
 
 	return Remote{
 		Name: parts[0],
 		Type: parts[1],
-	}
+	}, nil
 }
 
 var aboutCommandDefinitionForRemoteCall = &cobra.Command{
