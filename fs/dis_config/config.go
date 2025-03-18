@@ -3,6 +3,8 @@ package dis_config
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"sync"
 
@@ -181,36 +183,202 @@ func SyncAnyRemoteToLocal(localPath string) error {
 	return fmt.Errorf("all remote failed! last err : %v", lastErr)
 }
 
-func Config_upload() error {
+func Config_upload(args []string) error {
+	// path := getRcloneDirPath()
+	// remotes := config.GetRemotes()
+	// dir := filepath.Base(path)
+	// fmt.Printf("dir: %s\n", dir)
+
+	// var wg sync.WaitGroup
+	// var errs []error
+
+	// for _, remote := range remotes {
+
+	// 	wg.Add(1)
+
+	// 	go func(remote config.Remote) {
+	// 		defer wg.Done()
+	// 		dest := fmt.Sprintf("%s:%s", remote.Name, dir)
+
+	// 		err := remoteCallCopy([]string{path, dest})
+	// 		if err != nil {
+	// 			errs = append(errs, fmt.Errorf("error in remoteCallCopy for file %s: %w", path, err))
+	// 			return
+	// 		}
+	// 	}(remote)
+
+	// }
+
+	// wg.Wait()
+	// if len(errs) > 0 {
+	// 	return fmt.Errorf("errors occurred: %v", errs)
+	// }
+	// fmt.Println("config file uploaded!!")
+	// return nil
+
+	/*
+		처음엔 path(rclone자체가 저장되어있는)를 받음
+		그리고 원래
+		path := getRcloneDirPath() 에 들어가서 config파일에 내용이 있는지 확인
+		if config 파일이 존재림
+			-> 어딘가 복사해놓을지 물림
+				if 복사하고 싶다면, path받음
+					저장
+		-> 그냥 savedpath에 저장되어있는 rclone파일을 path에 올림
+	*/
+
+	savedPath := args[0]
+	stat, err := os.Stat(savedPath)
+	if err != nil {
+		return fmt.Errorf("savedPath의 정보를 가져올 수 없습니다: %w", err)
+	}
+	if !stat.IsDir() {
+		return fmt.Errorf("savedPath는 디렉토리가 아닙니다")
+	}
+	if filepath.Base(savedPath) != "rclone" {
+		return fmt.Errorf("잘못된 디렉토리입니다. 'rclone' 디렉토리를 업로드해야 합니다")
+	}
+
 	path := getRcloneDirPath()
-	remotes := config.GetRemotes()
-	dir := filepath.Base(path)
-	fmt.Printf("dir: %s\n", dir)
+	fmt.Printf("rclone path: %s\n", path)
 
-	var wg sync.WaitGroup
-	var errs []error
+	configFilePath := filepath.Join(path, "rclone.conf")
+	_, err = os.Stat(configFilePath)
+	if err == nil {
+		if DoBackup() {
+			var backupDest string
+			fmt.Printf("Enter a path: ")
+			fmt.Scanf("%s", &backupDest)
+			stat, err := os.Stat(backupDest)
+			if err != nil || !stat.IsDir() {
+				return fmt.Errorf("입력한 백업 대상 경로가 존재하지 않거나 디렉토리가 아닙니다: %s", backupDest)
 
-	for _, remote := range remotes {
-
-		wg.Add(1)
-
-		go func(remote config.Remote) {
-			defer wg.Done()
-			dest := fmt.Sprintf("%s:%s", remote.Name, dir)
-
-			err := remoteCallCopy([]string{path, dest})
-			if err != nil {
-				errs = append(errs, fmt.Errorf("error in remoteCallCopy for file %s: %w", path, err))
-				return
 			}
-		}(remote)
 
+			if err := copyDir(path, backupDest); err != nil {
+				return fmt.Errorf("백업 실패: %w", err)
+			}
+
+			fmt.Println("completed successfully backup")
+		}
 	}
 
-	wg.Wait()
-	if len(errs) > 0 {
-		return fmt.Errorf("errors occurred: %v", errs)
+	if err := copyDir(savedPath, path); err != nil {
+		return fmt.Errorf("saved rclone 디렉토리 업로드 실패: %w", err)
 	}
-	fmt.Println("config file uploaded!!")
+	fmt.Println("saved rclone 디렉토리 내용이 성공적으로 업로드되었습니다!")
+
 	return nil
+}
+
+// copyDirContents는 srcDir 안의 모든 파일과 서브디렉토리를 destDir로 복사합니다.
+func copyDirContents(srcDir, destDir string) error {
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return fmt.Errorf("디렉토리 읽기 실패: %w", err)
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(srcDir, entry.Name())
+		destPath := filepath.Join(destDir, entry.Name())
+
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			// 하위 디렉토리가 있으면 destPath에 디렉토리를 생성한 후, 재귀적으로 복사
+			if err := os.MkdirAll(destPath, info.Mode()); err != nil {
+				return err
+			}
+			if err := copyDir(srcPath, destPath); err != nil {
+				return err
+			}
+		} else {
+			// 파일인 경우 복사
+			if err := copyFile(srcPath, destPath); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func copyDir(src string, dst string) error {
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	if !srcInfo.IsDir() {
+		return fmt.Errorf("source is not dir")
+	}
+
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		relPath, err := filepath.Rel(src, path)
+
+		if err != nil {
+			return err
+		}
+		dstPath := filepath.Join(dst, relPath)
+
+		if info.IsDir() {
+			return os.MkdirAll(dstPath, info.Mode())
+		}
+
+		return copyFile(path, dstPath)
+	})
+
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		cerr := out.Close()
+		if err == nil {
+			err = cerr
+		}
+	}()
+
+	_, err = io.Copy(out, in)
+	if err != nil {
+		return err
+	}
+
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	return os.Chmod(dst, srcInfo.Mode())
+}
+
+func GetUserConfirmation(prompt string, options []string, defaultIndex int) bool {
+	switch i := config.CommandDefault(options, defaultIndex); i {
+	case 'y':
+		return true
+	case 'n':
+		return false
+	default:
+		fmt.Printf("Invalid Input!\n")
+		fmt.Printf("%s\n", prompt)
+		return GetUserConfirmation(prompt, options, defaultIndex)
+	}
+}
+
+func DoBackup() bool {
+	return GetUserConfirmation("Do you want to backup? ", []string{"yYes backup the rclone dir", "nNo ignore"}, 0)
 }
