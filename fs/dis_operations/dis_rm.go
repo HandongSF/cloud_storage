@@ -11,6 +11,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var PERM_DEL_FLAG = "--drive-use-trash=false"
+
 func Dis_rm(arg []string, reSignal bool) (err error) {
 	//rclonePath := GetRcloneDirPath()
 
@@ -114,7 +116,7 @@ func startRmFileGoroutine(originalFileName string, distributedFileArray []Distri
 
 			remotePath := fmt.Sprintf("%s:%s/%s", info.Remote.Name, remoteDirectory, hashedFileName)
 
-			if err := remoteCallDeleteFile([]string{remotePath}); err != nil {
+			if err := remoteCallDeleteFile([]string{PERM_DEL_FLAG, remotePath}); err != nil {
 				errCh <- fmt.Errorf("failed to delete %s on remote %s: %w", info.DistributedFile, info.Remote.Name, err)
 			}
 
