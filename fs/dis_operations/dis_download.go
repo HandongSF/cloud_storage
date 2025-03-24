@@ -72,11 +72,12 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 	}
 
 	start := time.Now()
-	startDownloadFileGoroutine(distributedFileInfos, originalFileName)
-
-	//startDownloadFileWorkerPool(distributedFileInfos)
+	if err := startDownloadFileGoroutine(distributedFileInfos, originalFileName); err != nil {
+		return err
+	}
 
 	elapsed := time.Since(start)
+	fmt.Println("Current Time:", time.Now().Format("2006-01-02 15:04:05"))
 	fmt.Printf("Time taken for dis_download: %s\n", elapsed)
 
 	absolutePath, err := getAbsolutePath(args[1])
@@ -117,6 +118,55 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 
 	// Erase Temp Shard
 	reedsolomon.DeleteShardWithFileNames(fileNames)
+
+	return nil
+}
+
+func startDownloadFileGoroutine_Worker(distributedFileInfos []DistributedFile, originalFileName string, workerCount int) (err error) {
+	shardDir, err := reedsolomon.GetShardDir()
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errs []error
+
+	jobs := make(chan DistributedFile, len(distributedFileInfos))
+
+	// Worker function
+	downloader := func() {
+		for fileInfo := range jobs {
+			if err := downloadFile(fileInfo, shardDir, originalFileName, &mu, &errs); err != nil {
+				mu.Lock()
+				errs = append(errs, err)
+				mu.Unlock()
+			}
+			wg.Done()
+		}
+	}
+
+	// Start worker goroutines
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			downloader()
+			wg.Done()
+		}()
+	}
+
+	// Send jobs to workers
+	for _, fileInfo := range distributedFileInfos {
+		wg.Add(1)
+		jobs <- fileInfo
+	}
+
+	close(jobs) // Close channel to signal workers
+	wg.Wait()   // Wait for all workers to finish
+
+	if len(errs) > 0 {
+		return fmt.Errorf("errors occurred during download: %v", errs)
+	}
 
 	return nil
 }

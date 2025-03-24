@@ -102,7 +102,15 @@ func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) err
 	}
 
 	elapsed := time.Since(start)
-	fmt.Printf("Time taken for entire dis_upload: %s\n", elapsed)
+	fileInfo, err := os.Stat(originalFileName)
+	if err != nil {
+		return err
+	}
+	throughput := float64(fileInfo.Size()) / elapsed.Seconds() / (1024 * 1024) // MB/s
+	currentTime := time.Now().Format("2006-01-02 15:04:05")
+
+	fmt.Printf("Time taken for copy cmd: %s, Throughput: %.2f MB/s, Current Time: %s\n",
+		elapsed, throughput, currentTime)
 
 	if err := ResetCheckFlag(originalFileName); err != nil {
 		return err
@@ -229,6 +237,72 @@ func updateRemoteInfo_Up(originalFileName string, shardInfo DistributedFile, thr
 	mu.Unlock()
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func startUploadFileGoroutine_Worker(originalFileName string, hashedFileNameMap map[string]string, distributedFileArray []DistributedFile, loadBalancer LoadBalancerType, workerCount int) (err error) {
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	var errs []error
+	dir := GetShardPath()
+	var totalThroughput float64
+	var fileCount int
+
+	jobs := make(chan DistributedFile, len(distributedFileArray))
+
+	// Worker function
+	uploader := func() {
+		for shardInfo := range jobs {
+			// Allocate Remote
+			mu.Lock()
+			err := shardInfo.AllocateRemote(loadBalancer)
+			mu.Unlock()
+			if err != nil {
+				mu.Lock()
+				errs = append(errs, err)
+				mu.Unlock()
+				continue
+			}
+
+			dest := fmt.Sprintf("%s:%s", shardInfo.Remote.Name, remoteDirectory)
+			source := filepath.Join(dir, hashedFileNameMap[shardInfo.DistributedFile])
+
+			// Upload file and calculate throughput
+			err = uploadFile(source, dest, &mu, &totalThroughput, &fileCount, &errs, originalFileName, shardInfo, hashedFileNameMap)
+			if err != nil {
+				mu.Lock()
+				errs = append(errs, err)
+				mu.Unlock()
+			}
+			wg.Done()
+		}
+	}
+
+	// Start worker goroutines
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			uploader()
+			wg.Done()
+		}()
+	}
+
+	// Send jobs to workers
+	for _, shardInfo := range distributedFileArray {
+		wg.Add(1)
+		jobs <- shardInfo
+	}
+
+	close(jobs) // Close channel to signal workers
+	wg.Wait()   // Wait for all workers to finish
+
+	averageThroughput := totalThroughput / float64(fileCount)
+	fmt.Printf("Average Throughput: %f Kbps\n", averageThroughput)
+	fmt.Println("Current Time:", time.Now().Format("2006-01-02 15:04:05"))
+
+	if len(errs) > 0 {
+		return fmt.Errorf("errors occurred: %v", errs)
 	}
 	return nil
 }
