@@ -72,7 +72,7 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 	}
 
 	start := time.Now()
-	if err := startDownloadFileGoroutine(distributedFileInfos, originalFileName); err != nil {
+	if err := startDownloadFileGoroutine_Worker(distributedFileInfos, originalFileName, 32); err != nil {
 		return err
 	}
 
