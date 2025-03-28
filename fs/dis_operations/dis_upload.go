@@ -97,7 +97,7 @@ func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) err
 
 	start := time.Now()
 
-	if err := startUploadFileGoroutine(originalFileName, hashedNamesMap, distributedFileArray, loadBalancer); err != nil {
+	if err := startUploadFileGoroutine_Worker(originalFileName, hashedNamesMap, distributedFileArray, loadBalancer, 32); err != nil {
 		return err
 	}
 
