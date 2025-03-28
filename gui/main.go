@@ -13,7 +13,7 @@ import (
 )
 
 func refreshRemoteFileList(fileListOutput *widget.RichText) {
-	cmd := exec.Command("../rclone", "dis_ls")
+	cmd := exec.Command("../rclone", "dis_ls") // rclone 이라는 이름의 목적파일 없다면 ../rclone 을 rclone으로 변경해야함
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -85,7 +85,7 @@ func main() {
 			if err != nil {
 				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Upload Error:** %v\n```\n%s\n```", err, string(output)))
 			} else {
-				logOutput.ParseMarkdown(fmt.Sprintf("🟢 **Upload Success:**\n```\n%s\n```", string(output)))
+				logOutput.ParseMarkdown("🟢 **Success!**")
 				refreshRemoteFileList(fileListOutput)
 			}
 		} else if mode == "Dis_Download" {
@@ -100,7 +100,7 @@ func main() {
 			if err != nil {
 				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Download Error:** %v\n```\n%s\n```", err, string(output)))
 			} else {
-				logOutput.ParseMarkdown(fmt.Sprintf("🟢 **Download Success:**\n```\n%s\n```", string(output)))
+				logOutput.ParseMarkdown("🟢 **Success!**")
 			}
 		}
 	})
