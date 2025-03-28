@@ -13,7 +13,7 @@ import (
 )
 
 func refreshRemoteFileList(fileListOutput *widget.RichText) {
-	cmd := exec.Command("../rclone", "dis_ls") // rclone 이라는 이름의 목적파일 없다면 ../rclone 을 rclone으로 변경해야함
+	cmd := exec.Command("rclone", "dis_ls") // 시스템 PATH에 등록된 rclone 사용, 목적파일이면 ../rclone으로 변경필요
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -69,43 +69,57 @@ func main() {
 	logOutput := widget.NewRichTextWithText("")
 	logOutput.Wrapping = fyne.TextWrapWord
 
+	// 로딩 바
+	progress := widget.NewProgressBarInfinite()
+	progress.Hide()
+
 	// 실행 버튼
 	startButton := widget.NewButton("Run", func() {
 		mode := modeSelect.Selected
-		if mode == "Dis_Upload" {
-			source := sourceEntry.Text
-			loadBalancer := loadBalancerSelect.Selected
+		logOutput.ParseMarkdown("")
+		progress.Show()
 
-			if source == "" || loadBalancer == "" {
-				logOutput.ParseMarkdown("*❌ Error:* Enter file path and load balancer")
-				return
+		go func() {
+			defer progress.Hide()
+
+			if mode == "Dis_Upload" {
+				source := sourceEntry.Text
+				loadBalancer := loadBalancerSelect.Selected
+
+				if source == "" || loadBalancer == "" {
+					logOutput.ParseMarkdown("*❌ Error:* Enter file path and load balancer")
+					return
+				}
+
+				cmd := exec.Command("rclone", "dis_upload", source, "--loadbalancer", loadBalancer)
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					logOutput.ParseMarkdown(fmt.Sprintf("❌ **Upload Error:**\n```\n%s\n```", string(output)))
+				} else {
+					logOutput.ParseMarkdown("🟢 **Success!**")
+					refreshRemoteFileList(fileListOutput)
+				}
+			} else if mode == "Dis_Download" {
+				target := targetEntry.Text
+				dest := destinationEntry.Text
+
+				if target == "" || dest == "" {
+					logOutput.ParseMarkdown("*❌ Error:* Enter target file and destination")
+					return
+				}
+
+				cmd := exec.Command("rclone", "dis_download", target, dest)
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					logOutput.ParseMarkdown(fmt.Sprintf("❌ **Download Error:**\n```\n%s\n```", string(output)))
+				} else {
+					logOutput.ParseMarkdown("🟢 **Success!**")
+				}
 			}
-			cmd := exec.Command("../rclone", "dis_upload", source, "--loadbalancer", loadBalancer)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Upload Error:** %v\n```\n%s\n```", err, string(output)))
-			} else {
-				logOutput.ParseMarkdown("🟢 **Success!**")
-				refreshRemoteFileList(fileListOutput)
-			}
-		} else if mode == "Dis_Download" {
-			target := targetEntry.Text
-			dest := destinationEntry.Text
-			if target == "" || dest == "" {
-				logOutput.ParseMarkdown("*❌ Error:* Enter target file and destination")
-				return
-			}
-			cmd := exec.Command("../rclone", "dis_download", target, dest)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Download Error:** %v\n```\n%s\n```", err, string(output)))
-			} else {
-				logOutput.ParseMarkdown("🟢 **Success!**")
-			}
-		}
+		}()
 	})
 
-	// 모드에 따라 UI 바꾸기
+	// 모드에 따라 UI 바꾸기 기능
 	modeSelect.OnChanged = func(mode string) {
 		if mode == "Dis_Upload" {
 			sourceEntry.Show()
@@ -121,7 +135,6 @@ func main() {
 			destinationEntry.Show()
 		}
 	}
-	// 초기 상태
 	modeSelect.OnChanged(modeSelect.Selected)
 
 	// UI 배치
@@ -133,6 +146,7 @@ func main() {
 		loadBalancerSelect,
 		targetEntry,
 		destinationEntry,
+		progress,
 		startButton,
 		logOutput,
 	)
