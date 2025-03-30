@@ -142,7 +142,7 @@ func createHashNames(distributedFileArray []DistributedFile) (hashNameMap map[st
 }
 
 func prepareUpload(absolutePath string) (hashNameMap map[string]string, distributedFileInfos []DistributedFile, err error) {
-	dis_names, checksums, shardSize, padding := reedsolomon.DoEncode(absolutePath)
+	dis_names, checksums, shardSize, padding, shard, parity := reedsolomon.DoEncode(absolutePath)
 
 	remotes := config.GetRemotes()
 
@@ -170,7 +170,7 @@ func prepareUpload(absolutePath string) (hashNameMap map[string]string, distribu
 		return nil, nil, fmt.Errorf("errors occurred during hashing: %v", errs)
 	}
 
-	err = MakeDataMap(absolutePath, distributedFileInfos, shardSize, padding)
+	err = MakeDataMap(absolutePath, distributedFileInfos, shardSize, padding, shard, parity)
 	if err != nil {
 		return nil, nil, err
 	}
