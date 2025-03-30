@@ -23,8 +23,9 @@ import (
 )
 
 var shardDir = "shard"
-var dataShards = flag.Int("data", 10, "Number of shards to split the data into, must be below 257.")
-var parShards = flag.Int("par", 2, "Number of parity shards")
+
+var dataShards = flag.Int("data", 5, "Number of shards to split the data into, must be below 257.")
+var parShards = flag.Int("par", 3, "Number of parity shards")
 var password = "hello"
 
 const fileCryptExtension string = ".fcef"
@@ -88,6 +89,27 @@ func DeleteShardDir() {
 	}
 }
 
+func calculateShardsNum(filename string) {
+	const minSize = 10 * 1024 * 1024
+
+	fileInfo, err := os.Stat(filename)
+	checkErr(err)
+
+	fileSize := fileInfo.Size()
+
+	if fileSize < minSize {
+		*dataShards = 5
+		*parShards = 3
+	} else {
+
+		for fileSize/int64(*dataShards) < minSize && *dataShards > 10 {
+			*dataShards -= 10
+		}
+
+		*parShards = *dataShards / 2
+	}
+}
+
 func DoEncode(fname string) ([]string, []string, int64, int64) {
 	var paths []string
 	var checksums []string
@@ -99,6 +121,8 @@ func DoEncode(fname string) ([]string, []string, int64, int64) {
 		err := os.Mkdir(path, 0755)
 		checkErr(err)
 	}
+
+	calculateShardsNum(fname)
 
 	// Encrypt the file
 	encFile, err := app.Encrypt(fname, v2.Passphrase(password))
