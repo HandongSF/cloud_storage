@@ -164,9 +164,9 @@ func startDownloadFileGoroutine_Worker(distributedFileInfos []DistributedFile, o
 	close(jobs) // Close channel to signal workers
 	wg.Wait()   // Wait for all workers to finish
 
-	if len(errs) > 0 {
-		return fmt.Errorf("errors occurred during download: %v", errs)
-	}
+	// if len(errs) > 0 {
+	// 	return fmt.Errorf("errors occurred during download: %v", errs)
+	// }
 
 	return nil
 }
@@ -195,9 +195,9 @@ func startDownloadFileGoroutine(distributedFileInfos []DistributedFile, original
 
 	wg.Wait()
 
-	if len(errs) > 0 {
-		return fmt.Errorf("errors occurred during download: %v", errs)
-	}
+	// if len(errs) > 0 {
+	// 	return fmt.Errorf("errors occurred during download: %v", errs)
+	// }
 
 	return nil
 }
