@@ -110,7 +110,7 @@ func calculateShardsNum(filename string) {
 	}
 }
 
-func DoEncode(fname string) ([]string, []string, int64, int64) {
+func DoEncode(fname string) ([]string, []string, int64, int64, int, int) {
 	var paths []string
 	var checksums []string
 	var padding int64
@@ -227,7 +227,7 @@ func DoEncode(fname string) ([]string, []string, int64, int64) {
 	err = os.Remove(encFile)
 	checkErr(err)
 
-	return paths, checksums, sizePerShard, padding
+	return paths, checksums, sizePerShard, padding, *dataShards, *parShards
 }
 
 func trimPadding(f *os.File, trimSize int64) {
@@ -271,7 +271,7 @@ func trimPadding(f *os.File, trimSize int64) {
 	}
 }
 
-func DoDecode(fname string, outfn string, padding int64, confChecksums map[string]string) error {
+func DoDecode(fname string, outfn string, padding int64, confChecksums map[string]string, downloadshard int, downloadparity int) error {
 	// ConfChecksums is the checksums from configfile
 
 	fname = fmt.Sprintf("%s%s", fname, fileCryptExtension)
@@ -300,13 +300,13 @@ func DoDecode(fname string, outfn string, padding int64, confChecksums map[strin
 	compareandDeleteChecksum(shardChecksums, confChecksums, tmpPath)
 
 	// Create matrix
-	enc, err := NewStream(*dataShards, *parShards)
+	enc, err := NewStream(downloadshard, downloadparity)
 	if err != nil {
 		return err
 	}
 
 	// Open the inputs
-	shards, size, err := openInput(*dataShards, *parShards, fname)
+	shards, size, err := openInput(downloadshard, downloadparity, fname)
 	if err != nil {
 		return err
 	}
@@ -320,7 +320,7 @@ func DoDecode(fname string, outfn string, padding int64, confChecksums map[strin
 		fmt.Println("Verification failed. Reconstructing data")
 		closeInput(shards)
 
-		shards, size, err = openInput(*dataShards, *parShards, fname)
+		shards, size, err = openInput(downloadshard, downloadparity, fname)
 		if err != nil {
 			return err
 		}
@@ -352,7 +352,7 @@ func DoDecode(fname string, outfn string, padding int64, confChecksums map[strin
 				}
 			}
 		}
-		shards, size, err = openInput(*dataShards, *parShards, fname)
+		shards, size, err = openInput(downloadshard, downloadparity, fname)
 		ok, err = enc.Verify(shards)
 		if !ok {
 			fmt.Println("Verification failed after reconstruction, data likely corrupted:", err)
@@ -372,13 +372,13 @@ func DoDecode(fname string, outfn string, padding int64, confChecksums map[strin
 		return err
 	}
 
-	shards, size, err = openInput(*dataShards, *parShards, fname)
+	shards, size, err = openInput(downloadshard, downloadparity, fname)
 	if err != nil {
 		return err
 	}
 
 	// We don't know the exact filesize.
-	err = enc.Join(f, shards, int64(*dataShards)*size)
+	err = enc.Join(f, shards, int64(downloadshard)*size)
 	if err != nil {
 		return err
 	}
