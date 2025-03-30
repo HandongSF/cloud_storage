@@ -24,8 +24,8 @@ import (
 
 var shardDir = "shard"
 
-var dataShards = flag.Int("data", 5, "Number of shards to split the data into, must be below 257.")
-var parShards = flag.Int("par", 3, "Number of parity shards")
+var dataShards = flag.Int("data", 170, "Number of shards to split the data into, must be below 257.")
+var parShards = flag.Int("par", 85, "Number of parity shards")
 var password = "hello"
 
 const fileCryptExtension string = ".fcef"
