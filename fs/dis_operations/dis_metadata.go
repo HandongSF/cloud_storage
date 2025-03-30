@@ -20,6 +20,8 @@ type FileInfo struct {
 	FileName             string                     `json:"original_file_name"`
 	FileSize             int64                      `json:"original_file_size"`
 	DisFileSize          int64                      `json:"distributed_file_size"`
+	Shard                int                        `json:"shard_count"`
+	Parity               int                        `json:"parity_count"`
 	Flag                 bool                       `json:"flag"`
 	State                string                     `json:"state"`
 	Checksum             string                     `json:"checksum"`
