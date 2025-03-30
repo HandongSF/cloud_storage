@@ -3,35 +3,83 @@ package main
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/storage"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
 
-func refreshRemoteFileList(fileListOutput *widget.RichText) {
-	cmd := exec.Command("rclone", "dis_ls") // 시스템 PATH에 등록된 rclone 사용, 목적파일이면 ../rclone으로 변경필요
-	output, err := cmd.CombinedOutput()
+func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.RichText, progress *widget.ProgressBarInfinite, w fyne.Window) {
+	fileListContainer.Objects = nil // 기존 항목 비우기
 
+	cmd := exec.Command("../rclone", "dis_ls")
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		fileListOutput.ParseMarkdown(fmt.Sprintf("❌ **Failed to load remote file list:**\n```\n%s\n```", string(output)))
-	} else {
-		fileListOutput.ParseMarkdown(fmt.Sprintf("📂 **Remote Files:**\n```\n%s\n```", string(output)))
+		fileListContainer.Add(widget.NewLabel(fmt.Sprintf("❌ Failed to load list:\n%s", string(output))))
+		fileListContainer.Refresh()
+		return
 	}
+
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fileName := line
+
+		fileLabel := widget.NewLabel(fileName)
+		deleteButton := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
+			dialog.ShowConfirm("Delete File", fmt.Sprintf("Delete '%s'?", fileName), func(confirm bool) {
+				if confirm {
+					progress.Show()
+					go func() {
+						defer progress.Hide()
+
+						cmd := exec.Command("../rclone", "dis_rm", fileName)
+						rmOut, rmErr := cmd.CombinedOutput()
+						if rmErr != nil {
+							logOutput.ParseMarkdown(fmt.Sprintf("❌ **Delete Error:**\n```\n%s\n```", string(rmOut)))
+						} else {
+							logOutput.ParseMarkdown("🟢 **Deleted!**")
+							refreshRemoteFileList(fileListContainer, logOutput, progress, w)
+						}
+					}()
+				}
+			}, w)
+		})
+
+		row := container.NewBorder(nil, nil, nil, deleteButton, fileLabel)
+		fileListContainer.Add(row)
+	}
+
+	fileListContainer.Refresh()
 }
 
 func main() {
 	a := app.New()
 	w := a.NewWindow("Dis_Upload / Dis_Download GUI")
-	w.Resize(fyne.NewSize(600, 500))
+	w.Resize(fyne.NewSize(600, 600))
 
 	// Remote 파일 목록 영역
-	fileListOutput := widget.NewRichTextWithText("📂 Loading remote file list...")
-	fileListOutput.Wrapping = fyne.TextWrapWord
-	refreshRemoteFileList(fileListOutput)
+	fileListContainer := container.NewVBox()
+	scrollableFileList := container.NewVScroll(fileListContainer)
+	scrollableFileList.SetMinSize(fyne.NewSize(580, 150))
+
+	// 로그 영역
+	logOutput := widget.NewRichTextWithText("")
+	logOutput.Wrapping = fyne.TextWrapWord
+	scrollableLog := container.NewVScroll(logOutput)
+	scrollableLog.SetMinSize(fyne.NewSize(580, 150))
+
+	// 로딩 인디케이터
+	progress := widget.NewProgressBarInfinite()
+	progress.Hide()
 
 	// 모드 선택
 	modeSelect := widget.NewSelect([]string{"Dis_Upload", "Dis_Download"}, nil)
@@ -65,14 +113,6 @@ func main() {
 	destinationEntry := widget.NewEntry()
 	destinationEntry.SetPlaceHolder("Enter destination path")
 
-	// 로그 영역
-	logOutput := widget.NewRichTextWithText("")
-	logOutput.Wrapping = fyne.TextWrapWord
-
-	// 로딩 바
-	progress := widget.NewProgressBarInfinite()
-	progress.Hide()
-
 	// 실행 버튼
 	startButton := widget.NewButton("Run", func() {
 		mode := modeSelect.Selected
@@ -91,13 +131,13 @@ func main() {
 					return
 				}
 
-				cmd := exec.Command("rclone", "dis_upload", source, "--loadbalancer", loadBalancer)
+				cmd := exec.Command("../rclone", "dis_upload", source, "--loadbalancer", loadBalancer)
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					logOutput.ParseMarkdown(fmt.Sprintf("❌ **Upload Error:**\n```\n%s\n```", string(output)))
 				} else {
 					logOutput.ParseMarkdown("🟢 **Success!**")
-					refreshRemoteFileList(fileListOutput)
+					refreshRemoteFileList(fileListContainer, logOutput, progress, w)
 				}
 			} else if mode == "Dis_Download" {
 				target := targetEntry.Text
@@ -108,7 +148,7 @@ func main() {
 					return
 				}
 
-				cmd := exec.Command("rclone", "dis_download", target, dest)
+				cmd := exec.Command("../rclone", "dis_download", target, dest)
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					logOutput.ParseMarkdown(fmt.Sprintf("❌ **Download Error:**\n```\n%s\n```", string(output)))
@@ -119,7 +159,7 @@ func main() {
 		}()
 	})
 
-	// 모드에 따라 UI 바꾸기 기능
+	// 모드에 따라 UI 전환
 	modeSelect.OnChanged = func(mode string) {
 		if mode == "Dis_Upload" {
 			sourceEntry.Show()
@@ -137,9 +177,9 @@ func main() {
 	}
 	modeSelect.OnChanged(modeSelect.Selected)
 
-	// UI 배치
+	// UI 구성
 	content := container.NewVBox(
-		fileListOutput,
+		scrollableFileList,
 		modeSelect,
 		sourceEntry,
 		fileSelectButton,
@@ -148,9 +188,10 @@ func main() {
 		destinationEntry,
 		progress,
 		startButton,
-		logOutput,
+		scrollableLog,
 	)
 
 	w.SetContent(content)
+	refreshRemoteFileList(fileListContainer, logOutput, progress, w)
 	w.ShowAndRun()
 }
