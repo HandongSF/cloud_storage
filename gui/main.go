@@ -17,6 +17,8 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+var loadingIndicator = widget.NewProgressBarInfinite()
+
 func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.RichText, progress *widget.Label, w fyne.Window) {
 	fileListContainer.Objects = nil // 기존 항목 비우기
 
@@ -43,6 +45,7 @@ func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.
 					progress.Show()
 					go func() {
 						defer progress.Hide()
+						loadingIndicator.Show()
 
 						cmd := exec.Command("rclone", "dis_rm", fileName)
 						rmOut, rmErr := cmd.CombinedOutput()
@@ -52,6 +55,7 @@ func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.
 							logOutput.ParseMarkdown("🟢 **Deleted!**")
 							refreshRemoteFileList(fileListContainer, logOutput, progress, w)
 						}
+						loadingIndicator.Hide()
 					}()
 				}
 			}, w)
@@ -124,6 +128,7 @@ func main() {
 		logOutput.ParseMarkdown("")
 		progressLabel.Show()
 		progressBar.Show()
+		progressBar.SetValue(0)
 
 		if mode == "Dis_Upload" {
 			source := sourceEntry.Text
@@ -164,6 +169,7 @@ func main() {
 
 			for scanner.Scan() {
 				line := scanner.Text()
+				logOutput.ParseMarkdown(line + "\n")
 
 				// 총 샤드 개수 파싱
 				if !shardCountFound && strings.Contains(line, "File split into") {
@@ -216,13 +222,64 @@ func main() {
 				return
 			}
 
+			progressLabel.Show()
+			progressBar.Show()
+			progressBar.SetValue(0)
+
 			cmd := exec.Command("rclone", "dis_download", target, dest)
-			output, err := cmd.CombinedOutput()
+
+			// 파이프라인 설정
+			stdout, err := cmd.StdoutPipe()
 			if err != nil {
-				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Download Error:**\n```\n%s\n```", string(output)))
-			} else {
-				logOutput.ParseMarkdown("🟢 **Success!**")
+				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error setting up pipe:**\n```\n%s\n```", err.Error()))
+				return
 			}
+
+			// 명령어 시작
+			if err := cmd.Start(); err != nil {
+				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error starting command:**\n```\n%s\n```", err.Error()))
+				return
+			}
+
+			// 출력 처리
+			scanner := bufio.NewScanner(stdout)
+			var totalShards int
+			var currentShard int
+			var shardCountFound bool
+
+			for scanner.Scan() {
+				line := scanner.Text()
+				logOutput.ParseMarkdown(line + "\n")
+
+				// 총 샤드 개수 파싱 (8개로 고정)
+				if !shardCountFound && strings.Contains(line, "Downloading shard") {
+					totalShards = 8
+					shardCountFound = true
+					progressLabel.SetText(fmt.Sprintf("Total shards to download: %d", totalShards))
+				}
+
+				// 샤드 다운로드 완료 확인
+				if strings.Contains(line, "Time taken for copy cmd:") {
+					currentShard++
+					if totalShards > 0 {
+						progressValue := float64(currentShard) / float64(totalShards)
+						progressBar.SetValue(progressValue)
+						progressLabel.SetText(fmt.Sprintf("Progress: %d/%d shards (%.1f%%)",
+							currentShard, totalShards, progressValue*100))
+					}
+				}
+			}
+
+			// 명령어 완료 대기
+			if err := cmd.Wait(); err != nil {
+				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Download Error:**\n```\n%s\n```", err.Error()))
+			} else {
+				progressBar.SetValue(1)
+				progressLabel.SetText("Success! All shards downloaded.")
+				logOutput.ParseMarkdown("🟢 **Success! File downloaded successfully.**")
+			}
+			progressLabel.Hide()
+			progressBar.Hide()
 		}
 	})
 
@@ -255,6 +312,7 @@ func main() {
 		destinationEntry,
 		progressLabel,
 		progressBar,
+		loadingIndicator,
 		startButton,
 		scrollableLog,
 	)
