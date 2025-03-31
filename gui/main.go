@@ -17,7 +17,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.RichText, progress *widget.ProgressBar, w fyne.Window) {
+func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.RichText, progress *widget.Label, w fyne.Window) {
 	fileListContainer.Objects = nil // 기존 항목 비우기
 
 	cmd := exec.Command("rclone", "dis_ls")
@@ -81,8 +81,8 @@ func main() {
 	scrollableLog.SetMinSize(fyne.NewSize(580, 150))
 
 	// 로딩 인디케이터
-	progress := widget.NewProgressBar()
-	progress.Hide()
+	progressLabel := widget.NewLabel("")
+	progressLabel.Hide()
 
 	// 모드 선택
 	modeSelect := widget.NewSelect([]string{"Dis_Upload", "Dis_Download"}, nil)
@@ -120,6 +120,7 @@ func main() {
 	startButton := widget.NewButton("Run", func() {
 		mode := modeSelect.Selected
 		logOutput.ParseMarkdown("")
+		progressLabel.Show()
 
 		if mode == "Dis_Upload" {
 			source := sourceEntry.Text
@@ -170,6 +171,7 @@ func main() {
 						if count, err := strconv.Atoi(countStr); err == nil {
 							totalFiles = count
 							fileCountFound = true
+							progressLabel.SetText(fmt.Sprintf("Total files to upload: %d", totalFiles))
 							logOutput.ParseMarkdown(fmt.Sprintf("**Total files to upload: %d**\n", totalFiles))
 						}
 					}
@@ -180,6 +182,8 @@ func main() {
 					currentFile++
 					if totalFiles > 0 {
 						progressValue := float64(currentFile) / float64(totalFiles)
+						progressLabel.SetText(fmt.Sprintf("Progress: %d/%d files (%.1f%%)",
+							currentFile, totalFiles, progressValue*100))
 						logOutput.ParseMarkdown(fmt.Sprintf("**Progress: %d/%d files (%.1f%%)**\n",
 							currentFile, totalFiles, progressValue*100))
 					}
@@ -190,9 +194,11 @@ func main() {
 			if err := cmd.Wait(); err != nil {
 				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Upload Error:**\n```\n%s\n```", err.Error()))
 			} else {
+				progressLabel.SetText("Success! All files uploaded.")
 				logOutput.ParseMarkdown("🟢 **Success! All files uploaded.**")
-				refreshRemoteFileList(fileListContainer, logOutput, progress, w)
+				refreshRemoteFileList(fileListContainer, logOutput, progressLabel, w)
 			}
+			progressLabel.Hide()
 		} else if mode == "Dis_Download" {
 			target := targetEntry.Text
 			dest := destinationEntry.Text
@@ -239,12 +245,12 @@ func main() {
 		loadBalancerSelect,
 		targetEntry,
 		destinationEntry,
-		progress,
+		progressLabel,
 		startButton,
 		scrollableLog,
 	)
 
 	w.SetContent(content)
-	refreshRemoteFileList(fileListContainer, logOutput, progress, w)
+	refreshRemoteFileList(fileListContainer, logOutput, progressLabel, w)
 	w.ShowAndRun()
 }
