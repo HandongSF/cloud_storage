@@ -109,7 +109,7 @@ func main() {
 		fileDialog.Show()
 	})
 
-	loadBalancerOptions := []string{"RoundRobin", "LeastConnections", "Random"}
+	loadBalancerOptions := []string{"RoundRobin", "ResourceBased", "DownloadOptima", "UploadOptima"}
 	loadBalancerSelect := widget.NewSelect(loadBalancerOptions, nil)
 
 	// 다운로드용
