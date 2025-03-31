@@ -19,7 +19,7 @@ import (
 
 var loadingIndicator = widget.NewProgressBarInfinite()
 
-func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.RichText, progress *widget.Label, w fyne.Window) {
+func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.RichText, progress *widget.ProgressBar, w fyne.Window) {
 	fileListContainer.Objects = nil // 기존 항목 비우기
 
 	cmd := exec.Command("rclone", "dis_ls")
@@ -85,8 +85,6 @@ func main() {
 	scrollableLog.SetMinSize(fyne.NewSize(580, 150))
 
 	// 로딩 인디케이터
-	progressLabel := widget.NewLabel("")
-	progressLabel.Hide()
 	progressBar := widget.NewProgressBar()
 	progressBar.Hide()
 
@@ -126,7 +124,6 @@ func main() {
 	startButton := widget.NewButton("Run", func() {
 		mode := modeSelect.Selected
 		logOutput.ParseMarkdown("")
-		progressLabel.Show()
 		progressBar.Show()
 		progressBar.SetValue(0)
 
@@ -169,7 +166,7 @@ func main() {
 
 			for scanner.Scan() {
 				line := scanner.Text()
-				logOutput.ParseMarkdown(line + "\n")
+				// logOutput.ParseMarkdown(line + "\n")  // 상세 로그 제거
 
 				// 총 샤드 개수 파싱
 				if !shardCountFound && strings.Contains(line, "File split into") {
@@ -181,8 +178,6 @@ func main() {
 							// 데이터 샤드(5) + 패리티 샤드(3) = 총 8개
 							totalShards = 5 + parity
 							shardCountFound = true
-							progressLabel.SetText(fmt.Sprintf("Total shards to upload: %d", totalShards))
-							logOutput.ParseMarkdown(fmt.Sprintf("**Total shards to upload: %d**\n", totalShards))
 							progressBar.SetValue(0)
 						}
 					}
@@ -194,24 +189,18 @@ func main() {
 					if totalShards > 0 {
 						progressValue := float64(currentShard) / float64(totalShards)
 						progressBar.SetValue(progressValue)
-						progressLabel.SetText(fmt.Sprintf("Progress: %d/%d shards (%.1f%%)",
-							currentShard, totalShards, progressValue*100))
-						logOutput.ParseMarkdown(fmt.Sprintf("**Progress: %d/%d shards (%.1f%%)**\n",
-							currentShard, totalShards, progressValue*100))
 					}
 				}
 			}
 
 			// 명령어 완료 대기
 			if err := cmd.Wait(); err != nil {
-				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Upload Error:**\n```\n%s\n```", err.Error()))
+				logOutput.ParseMarkdown("❌ **Upload failed!**")
 			} else {
 				progressBar.SetValue(1)
-				progressLabel.SetText("Success! All shards uploaded.")
 				logOutput.ParseMarkdown("🟢 **Success! All shards uploaded.**")
-				refreshRemoteFileList(fileListContainer, logOutput, progressLabel, w)
+				refreshRemoteFileList(fileListContainer, logOutput, progressBar, w)
 			}
-			progressLabel.Hide()
 			progressBar.Hide()
 		} else if mode == "Dis_Download" {
 			target := targetEntry.Text
@@ -222,7 +211,6 @@ func main() {
 				return
 			}
 
-			progressLabel.Show()
 			progressBar.Show()
 			progressBar.SetValue(0)
 
@@ -249,13 +237,12 @@ func main() {
 
 			for scanner.Scan() {
 				line := scanner.Text()
-				logOutput.ParseMarkdown(line + "\n")
+				// logOutput.ParseMarkdown(line + "\n")  // 상세 로그 제거
 
 				// 총 샤드 개수 파싱 (8개로 고정)
 				if !shardCountFound && strings.Contains(line, "Downloading shard") {
 					totalShards = 8
 					shardCountFound = true
-					progressLabel.SetText(fmt.Sprintf("Total shards to download: %d", totalShards))
 				}
 
 				// 샤드 다운로드 완료 확인
@@ -264,21 +251,17 @@ func main() {
 					if totalShards > 0 {
 						progressValue := float64(currentShard) / float64(totalShards)
 						progressBar.SetValue(progressValue)
-						progressLabel.SetText(fmt.Sprintf("Progress: %d/%d shards (%.1f%%)",
-							currentShard, totalShards, progressValue*100))
 					}
 				}
 			}
 
 			// 명령어 완료 대기
 			if err := cmd.Wait(); err != nil {
-				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Download Error:**\n```\n%s\n```", err.Error()))
+				logOutput.ParseMarkdown("❌ **Download failed!**")
 			} else {
 				progressBar.SetValue(1)
-				progressLabel.SetText("Success! All shards downloaded.")
 				logOutput.ParseMarkdown("🟢 **Success! File downloaded successfully.**")
 			}
-			progressLabel.Hide()
 			progressBar.Hide()
 		}
 	})
@@ -310,7 +293,6 @@ func main() {
 		loadBalancerSelect,
 		targetEntry,
 		destinationEntry,
-		progressLabel,
 		progressBar,
 		loadingIndicator,
 		startButton,
@@ -318,6 +300,6 @@ func main() {
 	)
 
 	w.SetContent(content)
-	refreshRemoteFileList(fileListContainer, logOutput, progressLabel, w)
+	refreshRemoteFileList(fileListContainer, logOutput, progressBar, w)
 	w.ShowAndRun()
 }
