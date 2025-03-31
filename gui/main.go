@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -14,7 +16,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.RichText, progress *widget.ProgressBarInfinite, w fyne.Window) {
+func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.RichText, progress *widget.ProgressBar, w fyne.Window) {
 	fileListContainer.Objects = nil // 기존 항목 비우기
 
 	cmd := exec.Command("../rclone", "dis_ls")
@@ -78,7 +80,7 @@ func main() {
 	scrollableLog.SetMinSize(fyne.NewSize(580, 150))
 
 	// 로딩 인디케이터
-	progress := widget.NewProgressBarInfinite()
+	progress := widget.NewProgressBar()
 	progress.Hide()
 
 	// 모드 선택
@@ -131,14 +133,44 @@ func main() {
 					return
 				}
 
+				// 파일 존재 여부 확인
+				_, err := os.Stat(source)
+				if err != nil {
+					logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error reading file:**\n```\n%s\n```", err.Error()))
+					return
+				}
+
+				progress.SetValue(0)
+				progress.Show()
+
 				cmd := exec.Command("../rclone", "dis_upload", source, "--loadbalancer", loadBalancer)
 				output, err := cmd.CombinedOutput()
+
+				// 출력에서 진행률 파싱
+				outputStr := string(output)
+				if strings.Contains(outputStr, "Progress:") {
+					lines := strings.Split(outputStr, "\n")
+					for _, line := range lines {
+						if strings.Contains(line, "Progress:") {
+							// Progress: X% 형식에서 숫자만 추출
+							progressStr := strings.Split(line, "Progress:")[1]
+							progressStr = strings.TrimSpace(progressStr)
+							progressStr = strings.TrimSuffix(progressStr, "%")
+							if progressValue, err := strconv.ParseFloat(progressStr, 64); err == nil {
+								progress.SetValue(progressValue / 100)
+							}
+						}
+					}
+				}
+
 				if err != nil {
 					logOutput.ParseMarkdown(fmt.Sprintf("❌ **Upload Error:**\n```\n%s\n```", string(output)))
 				} else {
+					progress.SetValue(1)
 					logOutput.ParseMarkdown("🟢 **Success!**")
 					refreshRemoteFileList(fileListContainer, logOutput, progress, w)
 				}
+				progress.Hide()
 			} else if mode == "Dis_Download" {
 				target := targetEntry.Text
 				dest := destinationEntry.Text
