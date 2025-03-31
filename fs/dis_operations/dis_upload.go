@@ -102,7 +102,7 @@ func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) err
 	}
 
 	elapsed := time.Since(start)
-	fileInfo, err := os.Stat(originalFileName)
+	fileInfo, err := os.Stat(args[0])
 	if err != nil {
 		return err
 	}
