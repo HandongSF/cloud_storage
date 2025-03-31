@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -144,27 +145,54 @@ func main() {
 				progress.Show()
 
 				cmd := exec.Command("rclone", "dis_upload", source, "--loadbalancer", loadBalancer)
-				output, err := cmd.CombinedOutput()
 
-				// 출력에서 진행률 파싱
-				outputStr := string(output)
-				if strings.Contains(outputStr, "Progress:") {
-					lines := strings.Split(outputStr, "\n")
-					for _, line := range lines {
-						if strings.Contains(line, "Progress:") {
-							// Progress: X% 형식에서 숫자만 추출
-							progressStr := strings.Split(line, "Progress:")[1]
-							progressStr = strings.TrimSpace(progressStr)
-							progressStr = strings.TrimSuffix(progressStr, "%")
-							if progressValue, err := strconv.ParseFloat(progressStr, 64); err == nil {
-								progress.SetValue(progressValue / 100)
+				// 파이프라인 설정
+				stdout, err := cmd.StdoutPipe()
+				if err != nil {
+					logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error setting up pipe:**\n```\n%s\n```", err.Error()))
+					return
+				}
+
+				// 명령어 시작
+				if err := cmd.Start(); err != nil {
+					logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error starting command:**\n```\n%s\n```", err.Error()))
+					return
+				}
+
+				// 출력 처리
+				scanner := bufio.NewScanner(stdout)
+				var totalFiles int
+				var currentFile int
+				var fileCountFound bool
+
+				for scanner.Scan() {
+					line := scanner.Text()
+					logOutput.ParseMarkdown(line + "\n")
+
+					// 총 파일 개수 파싱
+					if !fileCountFound && strings.Contains(line, "Total files to upload:") {
+						parts := strings.Split(line, ":")
+						if len(parts) > 1 {
+							countStr := strings.TrimSpace(parts[1])
+							if count, err := strconv.Atoi(countStr); err == nil {
+								totalFiles = count
+								fileCountFound = true
 							}
+						}
+					}
+
+					// 파일 업로드 완료 확인
+					if strings.Contains(line, "Uploaded:") {
+						currentFile++
+						if totalFiles > 0 {
+							progress.SetValue(float64(currentFile) / float64(totalFiles))
 						}
 					}
 				}
 
-				if err != nil {
-					logOutput.ParseMarkdown(fmt.Sprintf("❌ **Upload Error:**\n```\n%s\n```", string(output)))
+				// 명령어 완료 대기
+				if err := cmd.Wait(); err != nil {
+					logOutput.ParseMarkdown(fmt.Sprintf("❌ **Upload Error:**\n```\n%s\n```", err.Error()))
 				} else {
 					progress.SetValue(1)
 					logOutput.ParseMarkdown("🟢 **Success!**")
