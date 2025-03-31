@@ -107,7 +107,7 @@ func main() {
 		fileDialog.Show()
 	})
 
-	loadBalancerOptions := []string{"RoundRobin", "ResourceBased", "DownloadOptima", "DownloadOptima", "UploadOptima"}
+	loadBalancerOptions := []string{"RoundRobin", "LeastConnections", "Random"}
 	loadBalancerSelect := widget.NewSelect(loadBalancerOptions, nil)
 
 	// 다운로드용
@@ -120,107 +120,96 @@ func main() {
 	startButton := widget.NewButton("Run", func() {
 		mode := modeSelect.Selected
 		logOutput.ParseMarkdown("")
-		progress.Show()
 
-		go func() {
-			defer progress.Hide()
+		if mode == "Dis_Upload" {
+			source := sourceEntry.Text
+			loadBalancer := loadBalancerSelect.Selected
 
-			if mode == "Dis_Upload" {
-				source := sourceEntry.Text
-				loadBalancer := loadBalancerSelect.Selected
+			if source == "" || loadBalancer == "" {
+				logOutput.ParseMarkdown("*❌ Error:* Enter file path and load balancer")
+				return
+			}
 
-				if source == "" || loadBalancer == "" {
-					logOutput.ParseMarkdown("*❌ Error:* Enter file path and load balancer")
-					return
-				}
+			// 파일 존재 여부 확인
+			_, err := os.Stat(source)
+			if err != nil {
+				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error reading file:**\n```\n%s\n```", err.Error()))
+				return
+			}
 
-				// 파일 존재 여부 확인
-				_, err := os.Stat(source)
-				if err != nil {
-					logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error reading file:**\n```\n%s\n```", err.Error()))
-					return
-				}
+			cmd := exec.Command("../rclone", "dis_upload", source, "--loadbalancer", loadBalancer)
 
-				progress.SetValue(0)
-				progress.Show()
+			// 파이프라인 설정
+			stdout, err := cmd.StdoutPipe()
+			if err != nil {
+				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error setting up pipe:**\n```\n%s\n```", err.Error()))
+				return
+			}
 
-				cmd := exec.Command("rclone", "dis_upload", source, "--loadbalancer", loadBalancer)
+			// 명령어 시작
+			if err := cmd.Start(); err != nil {
+				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error starting command:**\n```\n%s\n```", err.Error()))
+				return
+			}
 
-				// 파이프라인 설정
-				stdout, err := cmd.StdoutPipe()
-				if err != nil {
-					logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error setting up pipe:**\n```\n%s\n```", err.Error()))
-					return
-				}
+			// 출력 처리
+			scanner := bufio.NewScanner(stdout)
+			var totalFiles int
+			var currentFile int
+			var fileCountFound bool
 
-				// 명령어 시작
-				if err := cmd.Start(); err != nil {
-					logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error starting command:**\n```\n%s\n```", err.Error()))
-					return
-				}
+			for scanner.Scan() {
+				line := scanner.Text()
+				logOutput.ParseMarkdown(line + "\n")
 
-				// 출력 처리
-				scanner := bufio.NewScanner(stdout)
-				var totalFiles int
-				var currentFile int
-				var fileCountFound bool
-
-				for scanner.Scan() {
-					line := scanner.Text()
-					logOutput.ParseMarkdown(line + "\n")
-
-					// 총 파일 개수 파싱
-					if !fileCountFound && strings.Contains(line, "Total files to upload:") {
-						parts := strings.Split(line, ":")
-						if len(parts) > 1 {
-							countStr := strings.TrimSpace(parts[1])
-							if count, err := strconv.Atoi(countStr); err == nil {
-								totalFiles = count
-								fileCountFound = true
-								logOutput.ParseMarkdown(fmt.Sprintf("**Total files to upload: %d**\n", totalFiles))
-							}
-						}
-					}
-
-					// 파일 업로드 완료 확인
-					if strings.Contains(line, "Uploaded:") {
-						currentFile++
-						if totalFiles > 0 {
-							progressValue := float64(currentFile) / float64(totalFiles)
-							progress.SetValue(progressValue)
-							logOutput.ParseMarkdown(fmt.Sprintf("**Progress: %d/%d files (%.1f%%)**\n",
-								currentFile, totalFiles, progressValue*100))
+				// 총 파일 개수 파싱
+				if !fileCountFound && strings.Contains(line, "Total files to upload:") {
+					parts := strings.Split(line, ":")
+					if len(parts) > 1 {
+						countStr := strings.TrimSpace(parts[1])
+						if count, err := strconv.Atoi(countStr); err == nil {
+							totalFiles = count
+							fileCountFound = true
+							logOutput.ParseMarkdown(fmt.Sprintf("**Total files to upload: %d**\n", totalFiles))
 						}
 					}
 				}
 
-				// 명령어 완료 대기
-				if err := cmd.Wait(); err != nil {
-					logOutput.ParseMarkdown(fmt.Sprintf("❌ **Upload Error:**\n```\n%s\n```", err.Error()))
-				} else {
-					progress.SetValue(1)
-					logOutput.ParseMarkdown("🟢 **Success! All files uploaded.**")
-					refreshRemoteFileList(fileListContainer, logOutput, progress, w)
-				}
-				progress.Hide()
-			} else if mode == "Dis_Download" {
-				target := targetEntry.Text
-				dest := destinationEntry.Text
-
-				if target == "" || dest == "" {
-					logOutput.ParseMarkdown("*❌ Error:* Enter target file and destination")
-					return
-				}
-
-				cmd := exec.Command("rclone", "dis_download", target, dest)
-				output, err := cmd.CombinedOutput()
-				if err != nil {
-					logOutput.ParseMarkdown(fmt.Sprintf("❌ **Download Error:**\n```\n%s\n```", string(output)))
-				} else {
-					logOutput.ParseMarkdown("🟢 **Success!**")
+				// 파일 업로드 완료 확인
+				if strings.Contains(line, "Uploaded:") {
+					currentFile++
+					if totalFiles > 0 {
+						progressValue := float64(currentFile) / float64(totalFiles)
+						logOutput.ParseMarkdown(fmt.Sprintf("**Progress: %d/%d files (%.1f%%)**\n",
+							currentFile, totalFiles, progressValue*100))
+					}
 				}
 			}
-		}()
+
+			// 명령어 완료 대기
+			if err := cmd.Wait(); err != nil {
+				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Upload Error:**\n```\n%s\n```", err.Error()))
+			} else {
+				logOutput.ParseMarkdown("🟢 **Success! All files uploaded.**")
+				refreshRemoteFileList(fileListContainer, logOutput, progress, w)
+			}
+		} else if mode == "Dis_Download" {
+			target := targetEntry.Text
+			dest := destinationEntry.Text
+
+			if target == "" || dest == "" {
+				logOutput.ParseMarkdown("*❌ Error:* Enter target file and destination")
+				return
+			}
+
+			cmd := exec.Command("rclone", "dis_download", target, dest)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Download Error:**\n```\n%s\n```", string(output)))
+			} else {
+				logOutput.ParseMarkdown("🟢 **Success!**")
+			}
+		}
 	})
 
 	// 모드에 따라 UI 전환
