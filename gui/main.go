@@ -177,6 +177,7 @@ func main() {
 							if count, err := strconv.Atoi(countStr); err == nil {
 								totalFiles = count
 								fileCountFound = true
+								logOutput.ParseMarkdown(fmt.Sprintf("**Total files to upload: %d**\n", totalFiles))
 							}
 						}
 					}
@@ -185,7 +186,10 @@ func main() {
 					if strings.Contains(line, "Uploaded:") {
 						currentFile++
 						if totalFiles > 0 {
-							progress.SetValue(float64(currentFile) / float64(totalFiles))
+							progressValue := float64(currentFile) / float64(totalFiles)
+							progress.SetValue(progressValue)
+							logOutput.ParseMarkdown(fmt.Sprintf("**Progress: %d/%d files (%.1f%%)**\n",
+								currentFile, totalFiles, progressValue*100))
 						}
 					}
 				}
@@ -195,7 +199,7 @@ func main() {
 					logOutput.ParseMarkdown(fmt.Sprintf("❌ **Upload Error:**\n```\n%s\n```", err.Error()))
 				} else {
 					progress.SetValue(1)
-					logOutput.ParseMarkdown("🟢 **Success!**")
+					logOutput.ParseMarkdown("🟢 **Success! All files uploaded.**")
 					refreshRemoteFileList(fileListContainer, logOutput, progress, w)
 				}
 				progress.Hide()
