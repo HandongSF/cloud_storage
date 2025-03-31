@@ -83,6 +83,8 @@ func main() {
 	// 로딩 인디케이터
 	progressLabel := widget.NewLabel("")
 	progressLabel.Hide()
+	progressBar := widget.NewProgressBar()
+	progressBar.Hide()
 
 	// 모드 선택
 	modeSelect := widget.NewSelect([]string{"Dis_Upload", "Dis_Download"}, nil)
@@ -121,6 +123,7 @@ func main() {
 		mode := modeSelect.Selected
 		logOutput.ParseMarkdown("")
 		progressLabel.Show()
+		progressBar.Show()
 
 		if mode == "Dis_Upload" {
 			source := sourceEntry.Text
@@ -155,37 +158,40 @@ func main() {
 
 			// 출력 처리
 			scanner := bufio.NewScanner(stdout)
-			var totalFiles int
-			var currentFile int
-			var fileCountFound bool
+			var totalShards int
+			var currentShard int
+			var shardCountFound bool
 
 			for scanner.Scan() {
 				line := scanner.Text()
-				logOutput.ParseMarkdown(line + "\n")
 
-				// 총 파일 개수 파싱
-				if !fileCountFound && strings.Contains(line, "Total files to upload:") {
-					parts := strings.Split(line, ":")
+				// 총 샤드 개수 파싱
+				if !shardCountFound && strings.Contains(line, "File split into") {
+					parts := strings.Split(line, "data +")
 					if len(parts) > 1 {
-						countStr := strings.TrimSpace(parts[1])
-						if count, err := strconv.Atoi(countStr); err == nil {
-							totalFiles = count
-							fileCountFound = true
-							progressLabel.SetText(fmt.Sprintf("Total files to upload: %d", totalFiles))
-							logOutput.ParseMarkdown(fmt.Sprintf("**Total files to upload: %d**\n", totalFiles))
+						parityStr := strings.Split(parts[1], "parity")[0]
+						parityStr = strings.TrimSpace(parityStr)
+						if parity, err := strconv.Atoi(parityStr); err == nil {
+							// 데이터 샤드(5) + 패리티 샤드(3) = 총 8개
+							totalShards = 5 + parity
+							shardCountFound = true
+							progressLabel.SetText(fmt.Sprintf("Total shards to upload: %d", totalShards))
+							logOutput.ParseMarkdown(fmt.Sprintf("**Total shards to upload: %d**\n", totalShards))
+							progressBar.SetValue(0)
 						}
 					}
 				}
 
-				// 파일 업로드 완료 확인
-				if strings.Contains(line, "Uploaded:") {
-					currentFile++
-					if totalFiles > 0 {
-						progressValue := float64(currentFile) / float64(totalFiles)
-						progressLabel.SetText(fmt.Sprintf("Progress: %d/%d files (%.1f%%)",
-							currentFile, totalFiles, progressValue*100))
-						logOutput.ParseMarkdown(fmt.Sprintf("**Progress: %d/%d files (%.1f%%)**\n",
-							currentFile, totalFiles, progressValue*100))
+				// 샤드 업로드 완료 확인
+				if strings.Contains(line, "Time taken for copy cmd:") {
+					currentShard++
+					if totalShards > 0 {
+						progressValue := float64(currentShard) / float64(totalShards)
+						progressBar.SetValue(progressValue)
+						progressLabel.SetText(fmt.Sprintf("Progress: %d/%d shards (%.1f%%)",
+							currentShard, totalShards, progressValue*100))
+						logOutput.ParseMarkdown(fmt.Sprintf("**Progress: %d/%d shards (%.1f%%)**\n",
+							currentShard, totalShards, progressValue*100))
 					}
 				}
 			}
@@ -194,11 +200,13 @@ func main() {
 			if err := cmd.Wait(); err != nil {
 				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Upload Error:**\n```\n%s\n```", err.Error()))
 			} else {
-				progressLabel.SetText("Success! All files uploaded.")
-				logOutput.ParseMarkdown("🟢 **Success! All files uploaded.**")
+				progressBar.SetValue(1)
+				progressLabel.SetText("Success! All shards uploaded.")
+				logOutput.ParseMarkdown("🟢 **Success! All shards uploaded.**")
 				refreshRemoteFileList(fileListContainer, logOutput, progressLabel, w)
 			}
 			progressLabel.Hide()
+			progressBar.Hide()
 		} else if mode == "Dis_Download" {
 			target := targetEntry.Text
 			dest := destinationEntry.Text
@@ -246,6 +254,7 @@ func main() {
 		targetEntry,
 		destinationEntry,
 		progressLabel,
+		progressBar,
 		startButton,
 		scrollableLog,
 	)
