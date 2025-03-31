@@ -19,7 +19,7 @@ import (
 func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.RichText, progress *widget.ProgressBar, w fyne.Window) {
 	fileListContainer.Objects = nil // 기존 항목 비우기
 
-	cmd := exec.Command("../rclone", "dis_ls")
+	cmd := exec.Command("rclone", "dis_ls")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fileListContainer.Add(widget.NewLabel(fmt.Sprintf("❌ Failed to load list:\n%s", string(output))))
@@ -43,7 +43,7 @@ func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.
 					go func() {
 						defer progress.Hide()
 
-						cmd := exec.Command("../rclone", "dis_rm", fileName)
+						cmd := exec.Command("rclone", "dis_rm", fileName)
 						rmOut, rmErr := cmd.CombinedOutput()
 						if rmErr != nil {
 							logOutput.ParseMarkdown(fmt.Sprintf("❌ **Delete Error:**\n```\n%s\n```", string(rmOut)))
@@ -106,7 +106,7 @@ func main() {
 		fileDialog.Show()
 	})
 
-	loadBalancerOptions := []string{"RoundRobin", "LeastConnections", "Random"}
+	loadBalancerOptions := []string{"RoundRobin", "ResourceBased", "DownloadOptima", "DownloadOptima", "UploadOptima"}
 	loadBalancerSelect := widget.NewSelect(loadBalancerOptions, nil)
 
 	// 다운로드용
@@ -143,7 +143,7 @@ func main() {
 				progress.SetValue(0)
 				progress.Show()
 
-				cmd := exec.Command("../rclone", "dis_upload", source, "--loadbalancer", loadBalancer)
+				cmd := exec.Command("rclone", "dis_upload", source, "--loadbalancer", loadBalancer)
 				output, err := cmd.CombinedOutput()
 
 				// 출력에서 진행률 파싱
@@ -180,7 +180,7 @@ func main() {
 					return
 				}
 
-				cmd := exec.Command("../rclone", "dis_download", target, dest)
+				cmd := exec.Command("rclone", "dis_download", target, dest)
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					logOutput.ParseMarkdown(fmt.Sprintf("❌ **Download Error:**\n```\n%s\n```", string(output)))
