@@ -18,7 +18,7 @@ func init() {
 }
 
 var commandDefinition = &cobra.Command{
-	Use:   "dis_upload source:path",
+	Use:   "dis_upload source:path password",
 	Short: `Upload source file via distributing it to registered remotes.`,
 	Long: strings.ReplaceAll(
 		`Upload source file via distributing it to registered remotes. This 
@@ -44,7 +44,7 @@ If you wish to simply copy the file without any distribution, use the
 		"groups": "Copy,Filter,Listing,Important",
 	},
 	Run: func(command *cobra.Command, args []string) {
-		cmd.CheckArgs(1, 1, command, args)
+		cmd.CheckArgs(2, 2, command, args)
 		cmd.Run(true, true, command, func() error {
 			if !loadBalancer.Value.IsValid() {
 				return fmt.Errorf("invalid load balancer type: %s (valid: RoundRobin, LeastConnections, Random)", loadBalancer.Value)
