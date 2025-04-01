@@ -27,6 +27,7 @@ type FileInfo struct {
 	Checksum             string                     `json:"checksum"`
 	Padding              int64                      `json:"padding_amount"`
 	DistributedFileInfos map[string]DistributedFile `json:"distributed_file_infos"`
+	Password             string                     `json:"password"`
 }
 
 type DistributedFile struct {
