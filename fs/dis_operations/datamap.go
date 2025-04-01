@@ -102,7 +102,7 @@ func GetDistributedInfo(fileName string, remote Remote, checksum string) (Distri
 }
 
 // making file info about original file
-func MakeDataMap(originalFilePath string, distributedFiles []DistributedFile, disFileSize int64, paddingAmount int64, shard int, parity int) error {
+func MakeDataMap(originalFilePath string, distributedFiles []DistributedFile, disFileSize int64, paddingAmount int64, shard int, parity int, pw string) error {
 	if originalFilePath == "" {
 		return errors.New("originalFilePath cannot be empty")
 	}
@@ -136,6 +136,7 @@ func MakeDataMap(originalFilePath string, distributedFiles []DistributedFile, di
 		Checksum:             checksum,
 		Padding:              paddingAmount,
 		DistributedFileInfos: dFileMap,
+		Password:             pw,
 	}
 
 	FilesMap, err := readJsonFile()
