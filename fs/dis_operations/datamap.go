@@ -131,12 +131,12 @@ func MakeDataMap(originalFilePath string, distributedFiles []DistributedFile, di
 		DisFileSize:          disFileSize,
 		Shard:                shard,
 		Parity:               parity,
+		Password:             pw,
 		Flag:                 true,
 		State:                "upload",
 		Checksum:             checksum,
 		Padding:              paddingAmount,
 		DistributedFileInfos: dFileMap,
-		Password:             pw,
 	}
 
 	FilesMap, err := readJsonFile()
