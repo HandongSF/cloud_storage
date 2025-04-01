@@ -110,7 +110,7 @@ func calculateShardsNum(filename string) {
 	}
 }
 
-func DoEncode(fname string) ([]string, []string, int64, int64, int, int) {
+func DoEncode(fname string, password string) ([]string, []string, int64, int64, int, int) {
 	var paths []string
 	var checksums []string
 	var padding int64
@@ -271,7 +271,7 @@ func trimPadding(f *os.File, trimSize int64) {
 	}
 }
 
-func DoDecode(fname string, outfn string, padding int64, confChecksums map[string]string, downloadshard int, downloadparity int) error {
+func DoDecode(fname string, outfn string, padding int64, confChecksums map[string]string, downloadshard int, downloadparity int, password string) error {
 	// ConfChecksums is the checksums from configfile
 
 	fname = fmt.Sprintf("%s%s", fname, fileCryptExtension)
