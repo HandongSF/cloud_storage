@@ -56,7 +56,6 @@ func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) err
 	originalFileName := filepath.Base(args[0])
 	var distributedFileArray []DistributedFile
 	hashedNamesMap := make(map[string]string)
-	password := args[1]
 
 	if reSignal {
 		tempDistributedFileArray, err := GetDistributedFileStruct(originalFileName)
@@ -90,7 +89,7 @@ func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) err
 				return nil
 			}
 		}
-		hashedNamesMap, distributedFileArray, err = prepareUpload(absolutePath, password)
+		hashedNamesMap, distributedFileArray, err = prepareUpload(absolutePath)
 		if err != nil {
 			return err
 		}
@@ -142,8 +141,8 @@ func createHashNames(distributedFileArray []DistributedFile) (hashNameMap map[st
 	return hashNameMap, errs
 }
 
-func prepareUpload(absolutePath string, password string) (hashNameMap map[string]string, distributedFileInfos []DistributedFile, err error) {
-	dis_names, checksums, shardSize, padding, shard, parity := reedsolomon.DoEncode(absolutePath, password)
+func prepareUpload(absolutePath string) (hashNameMap map[string]string, distributedFileInfos []DistributedFile, err error) {
+	dis_names, checksums, shardSize, padding, shard, parity := reedsolomon.DoEncode(absolutePath, tryGetPassword())
 	fmt.Println("Shard:", shard)
 	fmt.Println("Parity:", parity)
 	remotes := config.GetRemotes()
@@ -172,7 +171,7 @@ func prepareUpload(absolutePath string, password string) (hashNameMap map[string
 		return nil, nil, fmt.Errorf("errors occurred during hashing: %v", errs)
 	}
 
-	err = MakeDataMap(absolutePath, distributedFileInfos, shardSize, padding, shard, parity, password)
+	err = MakeDataMap(absolutePath, distributedFileInfos, shardSize, padding, shard, parity)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -14,11 +14,11 @@ var loadBalancer LoadBalancerFlag
 func init() {
 	cmd.Root.AddCommand(commandDefinition)
 	loadBalancer.Value = dis_operations.RoundRobin // Default value
-	commandDefinition.Flags().VarP(&loadBalancer, "loadbalancer", "b", "Load balancing strategy (RoundRobin, DownloadOptima, UploadOptima, ResourceBased)")
+	commandDefinition.Flags().VarP(&loadBalancer, "loadbalancer", "b", "Load balancing strategy (RoundRobin, ResourceBased, DownloadOptima, UploadOptima, )")
 }
 
 var commandDefinition = &cobra.Command{
-	Use:   "dis_upload source:path password",
+	Use:   "dis_upload source:path",
 	Short: `Upload source file via distributing it to registered remotes.`,
 	Long: strings.ReplaceAll(
 		`Upload source file via distributing it to registered remotes. This 
@@ -44,10 +44,10 @@ If you wish to simply copy the file without any distribution, use the
 		"groups": "Copy,Filter,Listing,Important",
 	},
 	Run: func(command *cobra.Command, args []string) {
-		cmd.CheckArgs(2, 2, command, args)
+		cmd.CheckArgs(1, 1, command, args)
 		cmd.Run(true, true, command, func() error {
 			if !loadBalancer.Value.IsValid() {
-				return fmt.Errorf("invalid load balancer type: %s (valid: RoundRobin, LeastConnections, Random)", loadBalancer.Value)
+				return fmt.Errorf("invalid load balancer type: %s (valid: RoundRobin, ResourceBased, DownloadOptima, UploadOptima)", loadBalancer.Value)
 			}
 			fmt.Printf("Uploading using load balancer: %s\n", loadBalancer.Value)
 
