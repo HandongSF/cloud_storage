@@ -102,7 +102,7 @@ func GetDistributedInfo(fileName string, remote Remote, checksum string) (Distri
 }
 
 // making file info about original file
-func MakeDataMap(originalFilePath string, distributedFiles []DistributedFile, disFileSize int64, paddingAmount int64, shard int, parity int, pw string) error {
+func MakeDataMap(originalFilePath string, distributedFiles []DistributedFile, disFileSize int64, paddingAmount int64, shard int, parity int) error {
 	if originalFilePath == "" {
 		return errors.New("originalFilePath cannot be empty")
 	}
@@ -131,7 +131,6 @@ func MakeDataMap(originalFilePath string, distributedFiles []DistributedFile, di
 		DisFileSize:          disFileSize,
 		Shard:                shard,
 		Parity:               parity,
-		Password:             pw,
 		Flag:                 true,
 		State:                "upload",
 		Checksum:             checksum,

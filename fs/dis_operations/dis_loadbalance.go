@@ -169,7 +169,6 @@ func UpdateRemoteInfo(remote Remote, updateFunc func(*RemoteInfo)) error {
 }
 
 func getLoadBalancerJsonFilePath() string {
-	// Get the directory path (you will need to implement GetRcloneDirPath based on your application logic)
 	path := GetRcloneDirPath()
 
 	// Construct the file path

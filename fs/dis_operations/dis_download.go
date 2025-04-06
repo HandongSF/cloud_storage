@@ -96,7 +96,7 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 		checksums[each.DistributedFile] = each.Checksum
 	}
 
-	err = reedsolomon.DoDecode(originalFileName, absolutePath, fileInfo.Padding, checksums, fileInfo.Shard, fileInfo.Parity, fileInfo.Password)
+	err = reedsolomon.DoDecode(originalFileName, absolutePath, fileInfo.Padding, checksums, fileInfo.Shard, fileInfo.Parity, tryGetPassword())
 	if err != nil {
 		result := ShowDescription_RemoveFile(originalFileName, err)
 		if result {

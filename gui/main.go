@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -15,6 +13,8 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+
+	"github.com/rclone/rclone/fs/dis_operations"
 )
 
 var loadingIndicator = widget.NewProgressBarInfinite()
@@ -68,31 +68,106 @@ func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.
 	fileListContainer.Refresh()
 }
 
-func main() {
-	a := app.New()
-	w := a.NewWindow("Dis_Upload / Dis_Download GUI")
-	w.Resize(fyne.NewSize(600, 600))
+// Function to prompt user for new password
+func showPasswordSetupWindow(w fyne.Window) {
+	fmt.Println("showPasswordSetupWindow")
+	passwordEntry := widget.NewPasswordEntry()
+	passwordEntry.SetPlaceHolder("Enter new password")
 
-	// Remote 파일 목록 영역
+	submitButton := widget.NewButton("Set Password", func() {
+		password := passwordEntry.Text
+		if password == "" {
+			dialog.ShowError(fmt.Errorf("Password cannot be empty"), w)
+			return
+		}
+
+		// Save the password
+		dis_operations.SaveUserPassword(password)
+		showMainGUIContent(w) // Just change window content
+	})
+
+	passwordForm := container.NewVBox(
+		widget.NewLabel("Set a new password"),
+		passwordEntry,
+		submitButton,
+	)
+
+	w.SetContent(passwordForm)
+}
+
+// Function to prompt user for existing password
+func showPasswordPromptWindow(w fyne.Window) {
+	fmt.Println("showPasswordPromptWindow")
+	passwordEntry := widget.NewPasswordEntry()
+	passwordEntry.SetPlaceHolder("Enter your password")
+
+	submitButton := widget.NewButton("Unlock", func() {
+		password := passwordEntry.Text
+		if password == "" {
+			dialog.ShowError(fmt.Errorf("Password cannot be empty"), w)
+			return
+		}
+
+		// Try decrypting files with given password
+		err := dis_operations.DecryptAllFilesInPath(password)
+		if err != nil {
+			dialog.ShowError(fmt.Errorf("Invalid password or decryption failed"), w)
+			return
+		}
+
+		showMainGUIContent(w) // Just change window content
+	})
+
+	passwordForm := container.NewVBox(
+		widget.NewLabel("Enter your password"),
+		passwordEntry,
+		submitButton,
+	)
+
+	w.SetContent(passwordForm)
+}
+
+// Function to encrypt all files before closing the app
+func encryptFilesOnExit() {
+	userPassword := dis_operations.GetUserPassword()
+	if userPassword == "" {
+		fmt.Println("Error: No user password found.")
+		return
+	}
+
+	err := dis_operations.EncryptAllFilesInPath(userPassword)
+	if err != nil {
+		fmt.Println("Error encrypting files:", err)
+	} else {
+		fmt.Println("All files encrypted successfully.")
+	}
+}
+
+func showMainGUIContent(w fyne.Window) {
+	fmt.Println("showMainGUI")
+
+	w.Resize(fyne.NewSize(600, 600))
+	w.SetTitle("Dis_Upload / Dis_Download GUI")
+
+	w.SetOnClosed(func() {
+		encryptFilesOnExit()
+	})
+
 	fileListContainer := container.NewVBox()
 	scrollableFileList := container.NewVScroll(fileListContainer)
 	scrollableFileList.SetMinSize(fyne.NewSize(580, 150))
 
-	// 로그 영역
 	logOutput := widget.NewRichTextWithText("")
 	logOutput.Wrapping = fyne.TextWrapWord
 	scrollableLog := container.NewVScroll(logOutput)
 	scrollableLog.SetMinSize(fyne.NewSize(580, 150))
 
-	// 로딩 인디케이터
 	progressBar := widget.NewProgressBar()
 	progressBar.Hide()
 
-	// 모드 선택
 	modeSelect := widget.NewSelect([]string{"Dis_Upload", "Dis_Download"}, nil)
 	modeSelect.SetSelected("Dis_Upload")
 
-	// 업로드용
 	sourceEntry := widget.NewEntry()
 	sourceEntry.SetPlaceHolder("Enter source file path")
 
@@ -114,13 +189,11 @@ func main() {
 	loadBalancerOptions := []string{"RoundRobin", "ResourceBased", "DownloadOptima", "UploadOptima"}
 	loadBalancerSelect := widget.NewSelect(loadBalancerOptions, nil)
 
-	// 다운로드용
 	targetEntry := widget.NewEntry()
 	targetEntry.SetPlaceHolder("Enter target file name (ex: test.jpg)")
 	destinationEntry := widget.NewEntry()
 	destinationEntry.SetPlaceHolder("Enter destination path")
 
-	// 실행 버튼
 	startButton := widget.NewButton("Run", func() {
 		mode := modeSelect.Selected
 		logOutput.ParseMarkdown("")
@@ -136,7 +209,6 @@ func main() {
 				return
 			}
 
-			// 파일 존재 여부 확인
 			_, err := os.Stat(source)
 			if err != nil {
 				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error reading file:**\n```\n%s\n```", err.Error()))
@@ -144,64 +216,13 @@ func main() {
 			}
 
 			cmd := exec.Command("../rclone", "dis_upload", source, "--loadbalancer", loadBalancer)
-
-			// 파이프라인 설정
-			stdout, err := cmd.StdoutPipe()
+			err = cmd.Run()
 			if err != nil {
-				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error setting up pipe:**\n```\n%s\n```", err.Error()))
-				return
-			}
-
-			// 명령어 시작
-			if err := cmd.Start(); err != nil {
-				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error starting command:**\n```\n%s\n```", err.Error()))
-				return
-			}
-
-			// 출력 처리
-			scanner := bufio.NewScanner(stdout)
-			var totalShards int
-			var currentShard int
-			var shardCountFound bool
-
-			for scanner.Scan() {
-				line := scanner.Text()
-				// logOutput.ParseMarkdown(line + "\n")  // 상세 로그 제거
-
-				// 총 샤드 개수 파싱
-				if !shardCountFound && strings.Contains(line, "File split into") {
-					parts := strings.Split(line, "data +")
-					if len(parts) > 1 {
-						parityStr := strings.Split(parts[1], "parity")[0]
-						parityStr = strings.TrimSpace(parityStr)
-						if parity, err := strconv.Atoi(parityStr); err == nil {
-							// 데이터 샤드(5) + 패리티 샤드(3) = 총 8개
-							totalShards = 5 + parity
-							shardCountFound = true
-							progressBar.SetValue(0)
-						}
-					}
-				}
-
-				// 샤드 업로드 완료 확인
-				if strings.Contains(line, "Time taken for copy cmd:") {
-					currentShard++
-					if totalShards > 0 {
-						progressValue := float64(currentShard) / float64(totalShards)
-						progressBar.SetValue(progressValue)
-					}
-				}
-			}
-
-			// 명령어 완료 대기
-			if err := cmd.Wait(); err != nil {
 				logOutput.ParseMarkdown("❌ **Upload failed!**")
 			} else {
-				progressBar.SetValue(1)
 				logOutput.ParseMarkdown("🟢 **Success! All shards uploaded.**")
 				refreshRemoteFileList(fileListContainer, logOutput, progressBar, w)
 			}
-			progressBar.Hide()
 		} else if mode == "Dis_Download" {
 			target := targetEntry.Text
 			dest := destinationEntry.Text
@@ -211,62 +232,16 @@ func main() {
 				return
 			}
 
-			progressBar.Show()
-			progressBar.SetValue(0)
-
 			cmd := exec.Command("rclone", "dis_download", target, dest)
-
-			// 파이프라인 설정
-			stdout, err := cmd.StdoutPipe()
+			err := cmd.Run()
 			if err != nil {
-				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error setting up pipe:**\n```\n%s\n```", err.Error()))
-				return
-			}
-
-			// 명령어 시작
-			if err := cmd.Start(); err != nil {
-				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error starting command:**\n```\n%s\n```", err.Error()))
-				return
-			}
-
-			// 출력 처리
-			scanner := bufio.NewScanner(stdout)
-			var totalShards int
-			var currentShard int
-			var shardCountFound bool
-
-			for scanner.Scan() {
-				line := scanner.Text()
-				// logOutput.ParseMarkdown(line + "\n")  // 상세 로그 제거
-
-				// 총 샤드 개수 파싱 (8개로 고정)
-				if !shardCountFound && strings.Contains(line, "Downloading shard") {
-					totalShards = 8
-					shardCountFound = true
-				}
-
-				// 샤드 다운로드 완료 확인
-				if strings.Contains(line, "Time taken for copy cmd:") {
-					currentShard++
-					if totalShards > 0 {
-						progressValue := float64(currentShard) / float64(totalShards)
-						progressBar.SetValue(progressValue)
-					}
-				}
-			}
-
-			// 명령어 완료 대기
-			if err := cmd.Wait(); err != nil {
 				logOutput.ParseMarkdown("❌ **Download failed!**")
 			} else {
-				progressBar.SetValue(1)
 				logOutput.ParseMarkdown("🟢 **Success! File downloaded successfully.**")
 			}
-			progressBar.Hide()
 		}
 	})
 
-	// 모드에 따라 UI 전환
 	modeSelect.OnChanged = func(mode string) {
 		if mode == "Dis_Upload" {
 			sourceEntry.Show()
@@ -284,7 +259,6 @@ func main() {
 	}
 	modeSelect.OnChanged(modeSelect.Selected)
 
-	// UI 구성
 	content := container.NewVBox(
 		scrollableFileList,
 		modeSelect,
@@ -294,12 +268,26 @@ func main() {
 		targetEntry,
 		destinationEntry,
 		progressBar,
-		loadingIndicator,
 		startButton,
 		scrollableLog,
 	)
 
 	w.SetContent(content)
 	refreshRemoteFileList(fileListContainer, logOutput, progressBar, w)
-	w.ShowAndRun()
+}
+
+func main() {
+	a := app.New()
+	w := a.NewWindow("Password Setup")
+	w.Resize(fyne.NewSize(300, 100))
+
+	if dis_operations.DoesUserPasswordExist() {
+		// Password exists -> Ask user for it
+		showPasswordPromptWindow(w)
+	} else {
+		// No password exists -> Ask user to create one
+		showPasswordSetupWindow(w)
+	}
+
+	w.ShowAndRun() // Only call this once
 }
