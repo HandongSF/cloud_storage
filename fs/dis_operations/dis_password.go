@@ -16,7 +16,7 @@ const fileCryptExtension string = ".fcef"
 
 var app = v2.App{
 	FileCryptExtension: fileCryptExtension,
-	Overwrite:          false,
+	Overwrite:          true,
 }
 
 func generateRandomPassword(length int) (string, error) {

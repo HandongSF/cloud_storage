@@ -19,7 +19,7 @@ import (
 
 var loadingIndicator = widget.NewProgressBarInfinite()
 
-func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.RichText, progress *widget.ProgressBar, w fyne.Window) {
+func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.RichText, progress *widget.ProgressBar, w fyne.Window, modeSelect *widget.Select, targetEntry *widget.Entry) {
 	fileListContainer.Objects = nil // 기존 항목 비우기
 
 	cmd := exec.Command("rclone", "dis_ls")
@@ -38,7 +38,15 @@ func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.
 		}
 		fileName := line
 
-		fileLabel := widget.NewLabel(fileName)
+		// Always use a button for consistency
+		fileButton := widget.NewButton(fileName, func(fn string) func() {
+			return func() {
+				if modeSelect.Selected == "Dis_Download" {
+					targetEntry.SetText(fn)
+				}
+			}
+		}(fileName)) // closure to capture fileName properly
+
 		deleteButton := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
 			dialog.ShowConfirm("Delete File", fmt.Sprintf("Delete '%s'?", fileName), func(confirm bool) {
 				if confirm {
@@ -53,7 +61,7 @@ func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.
 							logOutput.ParseMarkdown(fmt.Sprintf("❌ **Delete Error:**\n```\n%s\n```", string(rmOut)))
 						} else {
 							logOutput.ParseMarkdown("🟢 **Deleted!**")
-							refreshRemoteFileList(fileListContainer, logOutput, progress, w)
+							refreshRemoteFileList(fileListContainer, logOutput, progress, w, modeSelect, targetEntry)
 						}
 						loadingIndicator.Hide()
 					}()
@@ -61,7 +69,7 @@ func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.
 			}, w)
 		})
 
-		row := container.NewBorder(nil, nil, nil, deleteButton, fileLabel)
+		row := container.NewBorder(nil, nil, nil, deleteButton, fileButton)
 		fileListContainer.Add(row)
 	}
 
@@ -191,8 +199,20 @@ func showMainGUIContent(w fyne.Window) {
 
 	targetEntry := widget.NewEntry()
 	targetEntry.SetPlaceHolder("Enter target file name (ex: test.jpg)")
+
 	destinationEntry := widget.NewEntry()
 	destinationEntry.SetPlaceHolder("Enter destination path")
+	destinationSelectButton := widget.NewButton("Choose Destination", func() {
+		dialog.NewFolderOpen(func(list fyne.ListableURI, err error) {
+			if err != nil {
+				dialog.ShowError(err, w)
+				return
+			}
+			if list != nil {
+				destinationEntry.SetText(list.Path())
+			}
+		}, w).Show()
+	})
 
 	startButton := widget.NewButton("Run", func() {
 		mode := modeSelect.Selected
@@ -221,7 +241,7 @@ func showMainGUIContent(w fyne.Window) {
 				logOutput.ParseMarkdown("❌ **Upload failed!**")
 			} else {
 				logOutput.ParseMarkdown("🟢 **Success! All shards uploaded.**")
-				refreshRemoteFileList(fileListContainer, logOutput, progressBar, w)
+				refreshRemoteFileList(fileListContainer, logOutput, progressBar, w, modeSelect, targetEntry)
 			}
 		} else if mode == "Dis_Download" {
 			target := targetEntry.Text
@@ -248,12 +268,14 @@ func showMainGUIContent(w fyne.Window) {
 			fileSelectButton.Show()
 			loadBalancerSelect.Show()
 			targetEntry.Hide()
+			destinationSelectButton.Hide()
 			destinationEntry.Hide()
 		} else {
 			sourceEntry.Hide()
 			fileSelectButton.Hide()
 			loadBalancerSelect.Hide()
 			targetEntry.Show()
+			destinationSelectButton.Show()
 			destinationEntry.Show()
 		}
 	}
@@ -267,13 +289,14 @@ func showMainGUIContent(w fyne.Window) {
 		loadBalancerSelect,
 		targetEntry,
 		destinationEntry,
+		destinationSelectButton,
 		progressBar,
 		startButton,
 		scrollableLog,
 	)
 
 	w.SetContent(content)
-	refreshRemoteFileList(fileListContainer, logOutput, progressBar, w)
+	refreshRemoteFileList(fileListContainer, logOutput, progressBar, w, modeSelect, targetEntry)
 }
 
 func main() {
