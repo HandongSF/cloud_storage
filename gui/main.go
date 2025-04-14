@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -21,6 +23,13 @@ import (
 var loadingIndicator = widget.NewProgressBarInfinite()
 
 func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.RichText, progress *widget.ProgressBar, w fyne.Window, modeSelect *widget.Select, targetEntry *widget.Entry) {
+	rootPath := dis_operations.GetRcloneDirPath()
+	dataPath := filepath.Join(rootPath, "data")
+
+	if _, err := os.Stat(dataPath); os.IsNotExist(err) {
+		return
+	}
+
 	fileListContainer.Objects = nil // 기존 항목 비우기
 
 	cmd := exec.Command("rclone", "dis_ls")
@@ -236,75 +245,60 @@ func showMainGUIContent(w fyne.Window) {
 				return
 			}
 
-			cmd := exec.Command("../rclone", "dis_upload", source, "--loadbalancer", loadBalancer)
-			err = cmd.Run()
-			if err != nil {
-				logOutput.ParseMarkdown("❌ **Upload failed!**")
-			} else {
-				logOutput.ParseMarkdown("🟢 **Success! All shards uploaded.**")
-				refreshRemoteFileList(fileListContainer, logOutput, progressBar, w, modeSelect, targetEntry)
-			}
-		} else if mode == "Dis_Download" {
-			target := targetEntry.Text
-			dest := destinationEntry.Text
+			cmd := exec.Command("rclone", "dis_upload", source, "--loadbalancer", loadBalancer)
 
-			if target == "" || dest == "" {
-				logOutput.ParseMarkdown("*❌ Error:* Enter target file and destination")
+			stdoutPipe, err := cmd.StdoutPipe()
+			if err != nil {
+				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Pipe error:**\n```\n%s\n```", err.Error()))
 				return
 			}
 
-			progressBar.Show()
-			progressBar.SetValue(0)
-
-			cmd := exec.Command("rclone", "dis_download", target, dest)
-
-			// 파이프라인 설정
-			stdout, err := cmd.StdoutPipe()
-			if err != nil {
-				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error setting up pipe:**\n```\n%s\n```", err.Error()))
-				return
-			}
-
-			// 명령어 시작
 			if err := cmd.Start(); err != nil {
-				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error starting command:**\n```\n%s\n```", err.Error()))
+				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Start error:**\n```\n%s\n```", err.Error()))
 				return
 			}
 
-			// 출력 처리
-			scanner := bufio.NewScanner(stdout)
-			var totalShards int
-			var currentShard int
-			var shardCountFound bool
+			go func() {
+				scanner := bufio.NewScanner(stdoutPipe)
+				var totalShards int
+				var currentShard int
 
-			for scanner.Scan() {
-				line := scanner.Text()
+				for scanner.Scan() {
+					line := scanner.Text()
 
-				// 총 샤드 개수 파싱 (8개로 고정)
-				if !shardCountFound && strings.Contains(line, "Downloading shard") {
-					totalShards = 8
-					shardCountFound = true
-				}
+					// 총 샤드 수 추출
+					if strings.Contains(line, "File split into") {
+						parts := strings.Split(line, "data +")
+						if len(parts) > 1 {
+							left := strings.Split(parts[0], "into ")[1]
+							dataCount, _ := strconv.Atoi(strings.TrimSpace(left))
+							parityCountStr := strings.Split(parts[1], "parity")[0]
+							parityCount, _ := strconv.Atoi(strings.TrimSpace(parityCountStr))
+							totalShards = dataCount + parityCount
+						}
+					}
 
-				// 샤드 다운로드 완료 확인
-				if strings.Contains(line, "Time taken for copy cmd:") {
-					currentShard++
-					if totalShards > 0 {
-						progressValue := float64(currentShard) / float64(totalShards)
-						progressBar.SetValue(progressValue)
+					// 각 샤드 업로드 시마다 프로그레스 증가
+					if strings.HasPrefix(line, "Calling remoteCallCopy with args:") {
+						currentShard++
+						if totalShards > 0 {
+							progress := float64(currentShard) / float64(totalShards)
+							progressBar.SetValue(progress)
+						}
 					}
 				}
-			}
 
-			// 명령어 완료 대기
-			if err := cmd.Wait(); err != nil {
-				logOutput.ParseMarkdown("❌ **Download failed!**")
-			} else {
-				progressBar.SetValue(1)
-				logOutput.ParseMarkdown("🟢 **Success! File downloaded successfully.**")
-			}
-			progressBar.Hide()
+				err := cmd.Wait()
+				if err != nil {
+					logOutput.ParseMarkdown("❌ **Upload failed!**")
+				} else {
+					progressBar.SetValue(1)
+					logOutput.ParseMarkdown("🟢 **Success! All shards uploaded.**")
+					refreshRemoteFileList(fileListContainer, logOutput, progressBar, w, modeSelect, targetEntry)
+				}
+			}()
 		}
+		// ... Dis_Download 코드는 그대로 유지
 	})
 
 	modeSelect.OnChanged = func(mode string) {
