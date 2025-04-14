@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -252,13 +253,57 @@ func showMainGUIContent(w fyne.Window) {
 				return
 			}
 
+			progressBar.Show()
+			progressBar.SetValue(0)
+
 			cmd := exec.Command("rclone", "dis_download", target, dest)
-			err := cmd.Run()
+
+			// 파이프라인 설정
+			stdout, err := cmd.StdoutPipe()
 			if err != nil {
+				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error setting up pipe:**\n```\n%s\n```", err.Error()))
+				return
+			}
+
+			// 명령어 시작
+			if err := cmd.Start(); err != nil {
+				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error starting command:**\n```\n%s\n```", err.Error()))
+				return
+			}
+
+			// 출력 처리
+			scanner := bufio.NewScanner(stdout)
+			var totalShards int
+			var currentShard int
+			var shardCountFound bool
+
+			for scanner.Scan() {
+				line := scanner.Text()
+
+				// 총 샤드 개수 파싱 (8개로 고정)
+				if !shardCountFound && strings.Contains(line, "Downloading shard") {
+					totalShards = 8
+					shardCountFound = true
+				}
+
+				// 샤드 다운로드 완료 확인
+				if strings.Contains(line, "Time taken for copy cmd:") {
+					currentShard++
+					if totalShards > 0 {
+						progressValue := float64(currentShard) / float64(totalShards)
+						progressBar.SetValue(progressValue)
+					}
+				}
+			}
+
+			// 명령어 완료 대기
+			if err := cmd.Wait(); err != nil {
 				logOutput.ParseMarkdown("❌ **Download failed!**")
 			} else {
+				progressBar.SetValue(1)
 				logOutput.ParseMarkdown("🟢 **Success! File downloaded successfully.**")
 			}
+			progressBar.Hide()
 		}
 	})
 
