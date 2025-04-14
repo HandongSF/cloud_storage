@@ -49,7 +49,6 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 		return err
 	}
 
-	var fileNames []string
 	var distributedFileInfos []DistributedFile
 
 	if reSignal {
@@ -116,8 +115,12 @@ func Dis_Download(args []string, reSignal bool) (err error) {
 
 	fmt.Printf("File successfully downloaded to %s\n", absolutePath)
 
-	// Erase Temp Shard
-	reedsolomon.DeleteShardWithFileNames(fileNames)
+	var distributedFiles []string
+	for _, info := range distributedFileInfos {
+		distributedFiles = append(distributedFiles, info.DistributedFile)
+	}
+
+	reedsolomon.DeleteShardWithFileNames(distributedFiles)
 
 	return nil
 }

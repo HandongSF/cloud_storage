@@ -62,7 +62,6 @@ func DeleteShardWithFileNames(fileNames []string) {
 			fmt.Printf("Error deleting file %s: %v\n", filePath, err)
 			continue
 		}
-		//fmt.Printf("Successfully deleted file: %s\n", filePath)
 	}
 }
 func DeleteShardDir() {
