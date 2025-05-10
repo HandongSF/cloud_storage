@@ -97,7 +97,7 @@ func LoadBalancer_ResourceBased() (Remote, error) {
 		go func(remote config.Remote) {
 			defer wg.Done()
 
-			val, err := remoteCallAbout([]string{remote.Name + ":"})
+			val, err := RemoteCallAbout([]string{remote.Name + ":"})
 			if err != nil {
 				mu.Lock()
 				errs = append(errs, fmt.Errorf("error in remoteCallAbout for remote %s: %w", remote.Name, err))
@@ -124,11 +124,6 @@ func LoadBalancer_ResourceBased() (Remote, error) {
 
 	bestRemote_save = bestRemote
 	return bestRemote, nil
-}
-
-func LoadBalancer_Bolzmann() (Remote, error) {
-
-	return Remote{}, nil
 }
 
 func IncrementRoundRobinCounter() error {
@@ -362,7 +357,7 @@ var aboutCommandDefinitionForRemoteCall = &cobra.Command{
 }
 
 // Function to call the new command definition and return free storage
-func remoteCallAbout(args []string) (int64, error) {
+func RemoteCallAbout(args []string) (int64, error) {
 	fmt.Printf("Calling remoteCallAbout with args: %v\n", args)
 
 	// Create a new command instance
