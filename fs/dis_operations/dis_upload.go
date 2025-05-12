@@ -45,14 +45,6 @@ func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) err
 		return err
 	}
 
-	//rclonePath := GetRcloneDirPath()
-
-	//remote->local sync
-	//err = dis_config.SyncAnyRemoteToLocal(rclonePath)
-	// if err != nil {
-	// 	return err
-	// }
-
 	originalFileName := filepath.Base(args[0])
 	var distributedFileArray []DistributedFile
 	hashedNamesMap := make(map[string]string)
@@ -74,21 +66,29 @@ func Dis_Upload(args []string, reSignal bool, loadBalancer LoadBalancerType) err
 			}
 		}
 	} else {
+		// Uncomment this to allow duplicate check
+		// Currently commented bc gui not supporting this behavior
+
 		isDuplicate, err := DoesFileStructExist(originalFileName)
 		if err != nil {
 			return err
 		}
 
 		if isDuplicate {
-			if ShowDescription_DoOverwrite(originalFileName) {
-				err = Dis_rm(args, false)
-				if err != nil {
-					return err
-				}
-			} else {
-				return nil
+			// if ShowDescription_DoOverwrite(originalFileName) {
+			// 	err = Dis_rm(args, false)
+			// 	if err != nil {
+			// 		return err
+			// 	}
+			// } else {
+			// 	return nil
+			// }
+			err = Dis_rm(args, false)
+			if err != nil {
+				return err
 			}
 		}
+
 		hashedNamesMap, distributedFileArray, err = prepareUpload(absolutePath)
 		if err != nil {
 			return err

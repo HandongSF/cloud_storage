@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,6 +21,10 @@ import (
 	"github.com/rclone/rclone/fs/dis_operations"
 )
 
+// main.go is inside gui, after building the executable file, it must be moved beside the rlone.exe file
+// please make sure to build the rclone.exe file in the C:\Users\samue\Desktop\cloud_storage directory as well as
+// C:\Users\samue\Desktop\cloud_storage\gui> go build -o rclone.exe when building the icon
+
 var loadingIndicator = widget.NewProgressBarInfinite()
 
 func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.RichText, progress *widget.ProgressBar, w fyne.Window, modeSelect *widget.Select, targetEntry *widget.Entry) {
@@ -32,7 +37,7 @@ func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.
 
 	fileListContainer.Objects = nil // 기존 항목 비우기
 
-	cmd := exec.Command("rclone", "dis_ls")
+	cmd := exec.Command("./rclone", "dis_ls")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fileListContainer.Add(widget.NewLabel(fmt.Sprintf("❌ Failed to load list:\n%s", string(output))))
@@ -163,12 +168,11 @@ func encryptFilesOnExit() {
 
 func showMainGUIContent(w fyne.Window) {
 	fmt.Println("showMainGUI")
-
 	w.Resize(fyne.NewSize(600, 600))
 	w.SetTitle("Dis_Upload / Dis_Download GUI")
-
-	w.SetOnClosed(func() {
-		encryptFilesOnExit()
+	w.SetCloseIntercept(func() {
+		encryptFilesOnExit() // do work first
+		w.Close()            // manually trigger close after
 	})
 
 	fileListContainer := container.NewVBox()
@@ -183,140 +187,17 @@ func showMainGUIContent(w fyne.Window) {
 	progressBar := widget.NewProgressBar()
 	progressBar.Hide()
 
-	modeSelect := widget.NewSelect([]string{"Dis_Upload", "Dis_Download"}, nil)
-	modeSelect.SetSelected("Dis_Upload")
-
-	sourceEntry := widget.NewEntry()
-	sourceEntry.SetPlaceHolder("Enter source file path")
-
-	fileSelectButton := widget.NewButton("Choose File", func() {
-		fileDialog := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
-			if err != nil {
-				dialog.ShowError(err, w)
-				return
-			}
-			if reader != nil {
-				sourceEntry.SetText(reader.URI().Path())
-				defer reader.Close()
-			}
-		}, w)
-		fileDialog.SetFilter(storage.NewExtensionFileFilter([]string{".txt", ".jpg", ".png", ".pdf"}))
-		fileDialog.Show()
-	})
-
-	loadBalancerOptions := []string{"RoundRobin", "ResourceBased", "DownloadOptima", "UploadOptima"}
-	loadBalancerSelect := widget.NewSelect(loadBalancerOptions, nil)
-
-	targetEntry := widget.NewEntry()
-	targetEntry.SetPlaceHolder("Enter target file name (ex: test.jpg)")
-
-	destinationEntry := widget.NewEntry()
-	destinationEntry.SetPlaceHolder("Enter destination path")
-	destinationSelectButton := widget.NewButton("Choose Destination", func() {
-		dialog.NewFolderOpen(func(list fyne.ListableURI, err error) {
-			if err != nil {
-				dialog.ShowError(err, w)
-				return
-			}
-			if list != nil {
-				destinationEntry.SetText(list.Path())
-			}
-		}, w).Show()
-	})
+	modeSelect, sourceEntry, fileSelectButton, loadBalancerSelect, targetEntry, destinationEntry, destinationSelectButton := createInputFields(w)
 
 	startButton := widget.NewButton("Run", func() {
-		mode := modeSelect.Selected
-		logOutput.ParseMarkdown("")
-		progressBar.Show()
-		progressBar.SetValue(0)
-
-		if mode == "Dis_Upload" {
-			source := sourceEntry.Text
-			loadBalancer := loadBalancerSelect.Selected
-
-			if source == "" || loadBalancer == "" {
-				logOutput.ParseMarkdown("*❌ Error:* Enter file path and load balancer")
-				return
-			}
-
-			_, err := os.Stat(source)
-			if err != nil {
-				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error reading file:**\n```\n%s\n```", err.Error()))
-				return
-			}
-
-			cmd := exec.Command("rclone", "dis_upload", source, "--loadbalancer", loadBalancer)
-
-			stdoutPipe, err := cmd.StdoutPipe()
-			if err != nil {
-				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Pipe error:**\n```\n%s\n```", err.Error()))
-				return
-			}
-
-			if err := cmd.Start(); err != nil {
-				logOutput.ParseMarkdown(fmt.Sprintf("❌ **Start error:**\n```\n%s\n```", err.Error()))
-				return
-			}
-
-			go func() {
-				scanner := bufio.NewScanner(stdoutPipe)
-				var totalShards int
-				var currentShard int
-
-				for scanner.Scan() {
-					line := scanner.Text()
-
-					// 총 샤드 수 추출
-					if strings.Contains(line, "File split into") {
-						parts := strings.Split(line, "data +")
-						if len(parts) > 1 {
-							left := strings.Split(parts[0], "into ")[1]
-							dataCount, _ := strconv.Atoi(strings.TrimSpace(left))
-							parityCountStr := strings.Split(parts[1], "parity")[0]
-							parityCount, _ := strconv.Atoi(strings.TrimSpace(parityCountStr))
-							totalShards = dataCount + parityCount
-						}
-					}
-
-					// 각 샤드 업로드 시마다 프로그레스 증가
-					if strings.HasPrefix(line, "Calling remoteCallCopy with args:") {
-						currentShard++
-						if totalShards > 0 {
-							progress := float64(currentShard) / float64(totalShards)
-							progressBar.SetValue(progress)
-						}
-					}
-				}
-
-				err := cmd.Wait()
-				if err != nil {
-					logOutput.ParseMarkdown("❌ **Upload failed!**")
-				} else {
-					progressBar.SetValue(1)
-					logOutput.ParseMarkdown("🟢 **Success! All shards uploaded.**")
-					refreshRemoteFileList(fileListContainer, logOutput, progressBar, w, modeSelect, targetEntry)
-				}
-			}()
-		}
-		// ... Dis_Download 코드는 그대로 유지
+		handleRunButton(
+			modeSelect, sourceEntry, loadBalancerSelect, targetEntry, destinationEntry,
+			logOutput, progressBar, fileListContainer, w,
+		)
 	})
 
 	modeSelect.OnChanged = func(mode string) {
-		if mode == "Dis_Upload" {
-			sourceEntry.Show()
-			fileSelectButton.Show()
-			loadBalancerSelect.Show()
-			targetEntry.Hide()
-			destinationSelectButton.Hide()
-			destinationEntry.Hide()
-		} else {
-			sourceEntry.Hide()
-			fileSelectButton.Hide()
-			loadBalancerSelect.Hide()
-			targetEntry.Show()
-			destinationSelectButton.Show()
-			destinationEntry.Show()
-		}
+		toggleModeUI(mode, sourceEntry, fileSelectButton, loadBalancerSelect, targetEntry, destinationEntry, destinationSelectButton)
 	}
 	modeSelect.OnChanged(modeSelect.Selected)
 
@@ -338,8 +219,200 @@ func showMainGUIContent(w fyne.Window) {
 	refreshRemoteFileList(fileListContainer, logOutput, progressBar, w, modeSelect, targetEntry)
 }
 
+func createInputFields(w fyne.Window) (
+	*widget.Select, *widget.Entry, *widget.Button, *widget.Select,
+	*widget.Entry, *widget.Entry, *widget.Button,
+) {
+	modeSelect := widget.NewSelect([]string{"Dis_Upload", "Dis_Download"}, nil)
+	modeSelect.SetSelected("Dis_Upload")
+
+	sourceEntry := widget.NewEntry()
+	sourceEntry.SetPlaceHolder("Enter source file path")
+
+	fileSelectButton := widget.NewButton("Choose File", func() {
+		fileDialog := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
+			if err != nil {
+				dialog.ShowError(err, w)
+				return
+			}
+			if reader != nil {
+				sourceEntry.SetText(reader.URI().Path())
+				defer reader.Close()
+			}
+		}, w)
+		fileDialog.SetFilter(storage.NewExtensionFileFilter([]string{".txt", ".jpg", ".png", ".pdf"}))
+		fileDialog.Show()
+	})
+
+	loadBalancerSelect := widget.NewSelect(
+		[]string{"RoundRobin", "ResourceBased", "DownloadOptima", "UploadOptima"}, nil,
+	)
+
+	targetEntry := widget.NewEntry()
+	targetEntry.SetPlaceHolder("Enter target file name (ex: test.jpg)")
+
+	destinationEntry := widget.NewEntry()
+	destinationEntry.SetPlaceHolder("Enter destination path")
+	destinationSelectButton := widget.NewButton("Choose Destination", func() {
+		dialog.NewFolderOpen(func(list fyne.ListableURI, err error) {
+			if err != nil {
+				dialog.ShowError(err, w)
+				return
+			}
+			if list != nil {
+				destinationEntry.SetText(list.Path())
+			}
+		}, w).Show()
+	})
+	return modeSelect, sourceEntry, fileSelectButton, loadBalancerSelect, targetEntry, destinationEntry, destinationSelectButton
+}
+
+func toggleModeUI(mode string, sourceEntry *widget.Entry, fileSelect *widget.Button,
+	loadBalancer *widget.Select, targetEntry, destEntry *widget.Entry, destBtn *widget.Button) {
+
+	if mode == "Dis_Upload" {
+		sourceEntry.Show()
+		fileSelect.Show()
+		loadBalancer.Show()
+		targetEntry.Hide()
+		destBtn.Hide()
+		destEntry.Hide()
+	} else {
+		sourceEntry.Hide()
+		fileSelect.Hide()
+		loadBalancer.Hide()
+		targetEntry.Show()
+		destBtn.Show()
+		destEntry.Show()
+	}
+}
+
+func handleRunButton(
+	modeSelect *widget.Select,
+	sourceEntry *widget.Entry,
+	loadBalancerSelect *widget.Select,
+	targetEntry *widget.Entry,
+	destinationEntry *widget.Entry,
+	logOutput *widget.RichText,
+	progressBar *widget.ProgressBar,
+	fileListContainer *fyne.Container,
+	w fyne.Window,
+) {
+	mode := modeSelect.Selected
+	logOutput.ParseMarkdown("")
+	progressBar.Show()
+	progressBar.SetValue(0)
+
+	if mode == "Dis_Upload" {
+		startUpload(sourceEntry.Text, loadBalancerSelect.Selected, progressBar, logOutput, fileListContainer, w, modeSelect, targetEntry)
+	} else {
+		startDownload(targetEntry.Text, destinationEntry.Text, progressBar, logOutput, fileListContainer, w, modeSelect, targetEntry)
+	}
+}
+
+func startUpload(source, loadBalancer string,
+	progressBar *widget.ProgressBar, logOutput *widget.RichText,
+	fileListContainer *fyne.Container, w fyne.Window,
+	modeSelect *widget.Select, targetEntry *widget.Entry,
+) {
+	if source == "" || loadBalancer == "" {
+		logOutput.ParseMarkdown("*❌ Error:* Enter file path and load balancer")
+		return
+	}
+	if _, err := os.Stat(source); err != nil {
+		logOutput.ParseMarkdown(fmt.Sprintf("❌ **Error reading file:**\n```\n%s\n```", err.Error()))
+		return
+	}
+
+	cmd := exec.Command("rclone", "dis_upload", source, "--loadbalancer", loadBalancer)
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		logOutput.ParseMarkdown(fmt.Sprintf("❌ **Pipe error:**\n```\n%s\n```", err.Error()))
+		return
+	}
+	if err := cmd.Start(); err != nil {
+		logOutput.ParseMarkdown(fmt.Sprintf("❌ **Start error:**\n```\n%s\n```", err.Error()))
+		return
+	}
+
+	go monitorProgress(cmd, stdoutPipe, progressBar, logOutput, "upload", fileListContainer, w, modeSelect, targetEntry)
+}
+
+func startDownload(target, destination string,
+	progressBar *widget.ProgressBar, logOutput *widget.RichText,
+	fileListContainer *fyne.Container, w fyne.Window,
+	modeSelect *widget.Select, targetEntry *widget.Entry,
+) {
+	if target == "" || destination == "" {
+		logOutput.ParseMarkdown("*❌ Error:* Choose target file and destination")
+		return
+	}
+
+	cmd := exec.Command("rclone", "dis_download", target, destination)
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		logOutput.ParseMarkdown(fmt.Sprintf("❌ **Pipe error:**\n```\n%s\n```", err.Error()))
+		return
+	}
+	if err := cmd.Start(); err != nil {
+		logOutput.ParseMarkdown(fmt.Sprintf("❌ **Start error:**\n```\n%s\n```", err.Error()))
+		return
+	}
+
+	go monitorProgress(cmd, stdoutPipe, progressBar, logOutput, "download", fileListContainer, w, modeSelect, targetEntry)
+}
+
+func monitorProgress(
+	cmd *exec.Cmd, stdoutPipe io.ReadCloser,
+	progressBar *widget.ProgressBar, logOutput *widget.RichText,
+	mode string, fileListContainer *fyne.Container,
+	w fyne.Window, modeSelect *widget.Select, targetEntry *widget.Entry,
+) {
+	scanner := bufio.NewScanner(stdoutPipe)
+	var totalShards, currentShard int
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if mode == "upload" && strings.Contains(line, "File split into") {
+			parts := strings.Split(line, "data +")
+			if len(parts) > 1 {
+				dataCount, _ := strconv.Atoi(strings.TrimSpace(strings.Split(parts[0], "into ")[1]))
+				parityCount, _ := strconv.Atoi(strings.TrimSpace(strings.Split(parts[1], "parity")[0]))
+				totalShards = dataCount + parityCount
+			}
+		}
+
+		if mode == "download" && strings.Contains(line, "Expecting to download") {
+			parts := strings.Fields(line)
+			for i, word := range parts {
+				if word == "download" && i > 0 {
+					totalShards, _ = strconv.Atoi(parts[i-1])
+					break
+				}
+			}
+		}
+
+		if (mode == "upload" && strings.HasPrefix(line, "Time taken for copy cmd:")) ||
+			(mode == "download" && strings.HasPrefix(line, "Downloaded shard")) {
+			currentShard++
+			if totalShards > 0 {
+				progressBar.SetValue(float64(currentShard) / float64(totalShards))
+			}
+		}
+	}
+
+	if err := cmd.Wait(); err != nil {
+		logOutput.ParseMarkdown(fmt.Sprintf("❌ **%s failed!**", strings.Title(mode)))
+	} else {
+		progressBar.SetValue(1)
+		logOutput.ParseMarkdown(fmt.Sprintf("🟢 **Success! All shards %sed.**", mode))
+		refreshRemoteFileList(fileListContainer, logOutput, progressBar, w, modeSelect, targetEntry)
+	}
+}
+
 func main() {
-	a := app.New()
+	a := app.NewWithID("com.example.myapp")
 	w := a.NewWindow("Password Setup")
 	w.Resize(fyne.NewSize(300, 100))
 
