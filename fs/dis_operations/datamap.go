@@ -15,6 +15,7 @@ import (
 )
 
 var jsonFileMutex sync.Mutex
+var datamap_file_name = "datamap.json"
 
 // calculating checksum of file
 func calculateChecksum(filePath string) (string, error) {
@@ -34,7 +35,7 @@ func calculateChecksum(filePath string) (string, error) {
 // getting path existing json file
 func getJsonFilePath() string {
 	path := GetRcloneDirPath()
-	return filepath.Join(path, "data", "datamap.json")
+	return filepath.Join(path, "data", datamap_file_name)
 }
 
 // getting rclone dir path
@@ -411,4 +412,8 @@ func GetUncompletedFileInfo(originalFileName string) ([]DistributedFile, error) 
 	}
 
 	return uncompleted, nil
+}
+
+func GetDatamapFileName() string {
+	return datamap_file_name
 }

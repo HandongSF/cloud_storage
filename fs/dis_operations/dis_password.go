@@ -187,14 +187,14 @@ func DecryptAllFilesInPath(user_password string) error {
 	var encryptedFiles []string
 	var passwordVerified bool
 
-	// First pass: Decrypt all files
+	// First pass: Decrypt all files with .fcef extension
 	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			fmt.Println("Error accessing file:", err)
 			return err
 		}
 
-		if !info.IsDir() {
+		if !info.IsDir() && strings.HasSuffix(info.Name(), ".fcef") {
 			decryptedPath, err := app.Decrypt(path, v2.Passphrase(user_password))
 			if err != nil {
 				fmt.Printf("Error decrypting file %s: %v\n", path, err)
@@ -203,7 +203,7 @@ func DecryptAllFilesInPath(user_password string) error {
 			decryptedFiles = append(decryptedFiles, decryptedPath)
 			encryptedFiles = append(encryptedFiles, path)
 
-			// Check password once using special file (e.g. file with "password" in name)
+			// Check password once using special file (e.g. file with "user_password" in name)
 			if !passwordVerified && strings.Contains(filepath.Base(path), "user_password") {
 				fmt.Println("password file found")
 				if user_password == GetUserPassword() {

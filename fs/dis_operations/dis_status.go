@@ -18,7 +18,8 @@ func CheckState(action string, args []string, loadbalancer LoadBalancerType) (bo
 	var answer bool
 
 	if state == "upload" {
-		answer = DoReUpload(origin_name)
+		answer = false // Remove this line and uncomment below line to allow interactive process for DoReUpload
+		//answer = DoReUpload(origin_name)
 		if answer {
 			// reupload
 			fmt.Printf("state: %s, answer: %t\n", state, answer)
@@ -28,7 +29,8 @@ func CheckState(action string, args []string, loadbalancer LoadBalancerType) (bo
 			return false, DumpUploadState([]string{origin_name})
 		}
 	} else if state == "download" {
-		answer = DoReDownload(origin_name)
+		answer = false // Remove this line and uncomment below line to allow interactive process for DoReUpload
+		//answer = DoReDownload(origin_name)
 		if answer {
 			//redownload
 			path := AskDestination()

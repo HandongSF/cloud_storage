@@ -21,11 +21,38 @@ import (
 	"github.com/rclone/rclone/fs/dis_operations"
 )
 
-// main.go is inside gui, after building the executable file, it must be moved beside the rlone.exe file
-// please make sure to build the rclone.exe file in the C:\Users\samue\Desktop\cloud_storage directory as well as
-// C:\Users\samue\Desktop\cloud_storage\gui> go build -o rclone.exe when building the icon
+// 1. When making change to main.go file, build with go build -o MyApp.exe
+// 2. and drag the build icon (.exe file) to outside the gui file to
+// C:\Users\samue\Desktop\cloud_storage> go build -o rclone.exe
+// 3. Finally create a 바로가기 icon if you want it to be ran outside the rclone directory
 
 var loadingIndicator = widget.NewProgressBarInfinite()
+
+func checkCoreFile() int {
+	rcloneDir := dis_operations.GetRcloneDirPath()
+	dataDir := filepath.Join(rcloneDir, "data")
+
+	datamapBase := filepath.Join(dataDir, dis_operations.GetDatamapFileName())
+	lbBase := filepath.Join(dataDir, dis_operations.GetLBFileName())
+
+	datamapFcef := datamapBase + ".fcef"
+	lbFcef := lbBase + ".fcef"
+
+	// Check original files
+	baseExists := fileExists(datamapBase) && fileExists(lbBase)
+	// Check .fcef files
+	fcefExists := fileExists(datamapFcef) && fileExists(lbFcef)
+
+	if baseExists || fcefExists {
+		return 1
+	}
+	return -1
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
 
 func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.RichText, progress *widget.ProgressBar, w fyne.Window, modeSelect *widget.Select, targetEntry *widget.Entry) {
 	rootPath := dis_operations.GetRcloneDirPath()
@@ -35,6 +62,11 @@ func refreshRemoteFileList(fileListContainer *fyne.Container, logOutput *widget.
 		return
 	}
 
+	//Check if both core files exist
+	if checkCoreFile() == -1 {
+		fmt.Println("NO found")
+		return
+	}
 	fileListContainer.Objects = nil // 기존 항목 비우기
 
 	cmd := exec.Command("./rclone", "dis_ls")
@@ -166,13 +198,38 @@ func encryptFilesOnExit() {
 	}
 }
 
+func cleanShardFolderOnExit() error {
+	shardPath := filepath.Join(dis_operations.GetRcloneDirPath(), "shard")
+
+	entries, err := os.ReadDir(shardPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Folder doesn't exist, nothing to clean
+			return nil
+		}
+		return fmt.Errorf("failed to read shard folder: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			fullPath := filepath.Join(shardPath, entry.Name())
+			if err := os.Remove(fullPath); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func showMainGUIContent(w fyne.Window) {
 	fmt.Println("showMainGUI")
 	w.Resize(fyne.NewSize(600, 600))
 	w.SetTitle("Dis_Upload / Dis_Download GUI")
 	w.SetCloseIntercept(func() {
-		encryptFilesOnExit() // do work first
-		w.Close()            // manually trigger close after
+		encryptFilesOnExit()
+		cleanShardFolderOnExit()
+		w.Close() // manually trigger close
 	})
 
 	fileListContainer := container.NewVBox()
