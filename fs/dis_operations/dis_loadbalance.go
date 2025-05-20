@@ -16,6 +16,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var lb_file_name = "loadbalancer.json"
+
 type LoadBalancerType string
 
 const (
@@ -167,7 +169,7 @@ func getLoadBalancerJsonFilePath() string {
 	path := GetRcloneDirPath()
 
 	// Construct the file path
-	filePath := filepath.Join(path, "data", "loadbalancer.json")
+	filePath := filepath.Join(path, "data", lb_file_name)
 
 	// Check if the file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -396,4 +398,8 @@ func getFreeStorage(f fs.Fs) (int64, error) {
 
 	// Return free storage
 	return *u.Free, nil
+}
+
+func GetLBFileName() string {
+	return lb_file_name
 }
